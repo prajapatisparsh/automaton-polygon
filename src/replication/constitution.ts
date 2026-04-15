@@ -9,7 +9,7 @@ import fs from "fs";
 import pathLib from "path";
 import { createHash } from "crypto";
 import type { Database as DatabaseType } from "better-sqlite3";
-import type { ConwayClient } from "../types.js";
+import type { RuntimeClient } from "../types.js";
 
 /**
  * Compute SHA-256 hash of content.
@@ -23,8 +23,8 @@ function sha256(content: string): string {
  * Writes file, computes hash, stores hash in KV.
  */
 export async function propagateConstitution(
-  conway: ConwayClient,
-  sandboxId: string,
+  conway: RuntimeClient,
+  runtimeId: string,
   db: DatabaseType,
 ): Promise<void> {
   const constitutionPath = pathLib.join(
@@ -45,7 +45,7 @@ export async function propagateConstitution(
   // Store hash in KV for later verification
   db.prepare(
     "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-  ).run(`constitution_hash:${sandboxId}`, hash);
+  ).run(`constitution_hash:${runtimeId}`, hash);
 
   // chmod 444 as defense-in-depth (not primary verification mechanism)
   try {
@@ -59,14 +59,14 @@ export async function propagateConstitution(
  * Verify a child's constitution integrity by comparing hashes.
  */
 export async function verifyConstitution(
-  conway: ConwayClient,
-  sandboxId: string,
+  conway: RuntimeClient,
+  runtimeId: string,
   db: DatabaseType,
 ): Promise<{ valid: boolean; detail: string }> {
   // Get stored hash
   const storedRow = db
     .prepare("SELECT value FROM kv WHERE key = ?")
-    .get(`constitution_hash:${sandboxId}`) as { value: string } | undefined;
+    .get(`constitution_hash:${runtimeId}`) as { value: string } | undefined;
 
   if (!storedRow) {
     return { valid: false, detail: "no stored constitution hash found" };

@@ -15,7 +15,7 @@ const IDENTITY = {
   address: "0x1234" as any,
   account: {} as any,
   creatorAddress: "0x0000" as any,
-  sandboxId: "sb-1",
+  runtimeId: "sb-1",
   apiKey: "key",
   createdAt: "2026-01-01T00:00:00Z",
 };
@@ -373,7 +373,7 @@ describe("orchestration/Orchestrator", () => {
         getIdle: vi.fn().mockReturnValue([]),
         getBestForTask: vi.fn().mockReturnValue(null),
       });
-      const spawnAgent = vi.fn().mockResolvedValue({ address: "0xspawned", name: "Spawned", sandboxId: "sb-2" });
+      const spawnAgent = vi.fn().mockResolvedValue({ address: "0xspawned", name: "Spawned", runtimeId: "sb-2" });
       const orc = makeOrchestrator(db, {
         agentTracker,
         config: { spawnAgent },

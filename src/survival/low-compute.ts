@@ -16,7 +16,7 @@ export interface ModeTransition {
   from: SurvivalTier;
   to: SurvivalTier;
   timestamp: string;
-  creditsCents: number;
+  treasuryCents: number;
 }
 
 /**
@@ -68,7 +68,7 @@ export function recordTransition(
     from,
     to,
     timestamp: new Date().toISOString(),
-    creditsCents,
+    treasuryCents: creditsCents,
   };
 
   // Store transition history
@@ -106,10 +106,10 @@ export function getModelForTier(
     case "normal":
       return defaultModel;
     case "low_compute":
-      return "gpt-5-mini";
+      return "gemma4:e4b";
     case "critical":
-      return "gpt-5-mini";
+      return "gemma4:e4b";
     case "dead":
-      return "gpt-5-mini"; // Won't be used, but just in case
+      return "gemma4:e4b"; // Won't be used, but just in case
   }
 }

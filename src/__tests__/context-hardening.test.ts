@@ -389,7 +389,7 @@ describe("buildSystemPrompt status block", () => {
     const statusBlock = prompt.slice(statusStart, statusEnd);
 
     // Sandbox ID should NOT appear in status block
-    expect(statusBlock).not.toContain(identity.sandboxId);
+    expect(statusBlock).not.toContain(identity.runtimeId);
     expect(statusBlock).not.toContain("Sandbox:");
   });
 

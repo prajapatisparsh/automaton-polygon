@@ -19,7 +19,7 @@ import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { completeTask, failTask } from "./task-graph.js";
 import type { TaskNode, TaskResult } from "./task-graph.js";
 import type { Database } from "better-sqlite3";
-import type { ConwayClient } from "../types.js";
+import type { RuntimeClient } from "../types.js";
 
 function truncateOutput(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
@@ -69,7 +69,7 @@ interface WorkerInferenceClient {
 interface LocalWorkerConfig {
   db: Database;
   inference: WorkerInferenceClient;
-  conway: ConwayClient;
+  conway: RuntimeClient;
   workerId: string;
   maxTurns?: number;
 }
@@ -97,7 +97,7 @@ export class LocalWorkerPool {
    * Spawn a local worker for a task. Returns immediately — the worker
    * runs in the background and reports results via the task graph.
    */
-  spawn(task: TaskNode): { address: string; name: string; sandboxId: string } {
+  spawn(task: TaskNode): { address: string; name: string; runtimeId: string } {
     const workerId = `local-worker-${ulid()}`;
     const workerName = `worker-${task.agentRole ?? "generalist"}-${workerId.slice(-6)}`;
     const address = `local://${workerId}`;
@@ -119,7 +119,7 @@ export class LocalWorkerPool {
 
     this.activeWorkers.set(workerId, { promise: workerPromise, taskId: task.id, abortController });
 
-    return { address, name: workerName, sandboxId: workerId };
+    return { address, name: workerName, runtimeId: workerId };
   }
 
   getActiveCount(): number {

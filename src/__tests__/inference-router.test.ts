@@ -35,6 +35,9 @@ import type { ModelRegistryRow, InferenceCostRow, ModelStrategyConfig } from "..
 
 let db: BetterSqlite3.Database;
 
+const DEFAULT_LOCAL_MODEL = "gemma4:e4b";
+const FULL_TIER_MODEL = "glm-5.1";
+
 function createTestDb(): BetterSqlite3.Database {
   const testDb = new Database(":memory:");
   testDb.pragma("journal_mode = WAL");
@@ -79,10 +82,10 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry(db);
     registry.initialize();
 
-    const entry = registry.get("gpt-4.1");
+    const entry = registry.get(DEFAULT_LOCAL_MODEL);
     expect(entry).toBeDefined();
-    expect(entry!.modelId).toBe("gpt-4.1");
-    expect(entry!.provider).toBe("openai");
+    expect(entry!.modelId).toBe(DEFAULT_LOCAL_MODEL);
+    expect(entry!.provider).toBe("ollama");
   });
 
   it("get returns undefined for unknown model", () => {
@@ -98,11 +101,11 @@ describe("ModelRegistry", () => {
     registry.initialize();
 
     // Disable one model
-    registry.setEnabled("gpt-4.1", false);
+    registry.setEnabled(DEFAULT_LOCAL_MODEL, false);
 
     const available = registry.getAvailable();
     const ids = available.map((m) => m.modelId);
-    expect(ids).not.toContain("gpt-4.1");
+    expect(ids).not.toContain(DEFAULT_LOCAL_MODEL);
   });
 
   it("getAvailable filters by tier minimum", () => {
@@ -147,26 +150,26 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry(db);
     registry.initialize();
 
-    const existing = registry.get("gpt-4.1")!;
+    const existing = registry.get(DEFAULT_LOCAL_MODEL)!;
     registry.upsert({
       ...existing,
-      displayName: "Updated GPT-4.1",
+      displayName: "Updated Gemma 4 E4B",
       updatedAt: new Date().toISOString(),
     });
 
-    const updated = registry.get("gpt-4.1")!;
-    expect(updated.displayName).toBe("Updated GPT-4.1");
+    const updated = registry.get(DEFAULT_LOCAL_MODEL)!;
+    expect(updated.displayName).toBe("Updated Gemma 4 E4B");
   });
 
   it("setEnabled toggles model availability", () => {
     const registry = new ModelRegistry(db);
     registry.initialize();
 
-    registry.setEnabled("gpt-4.1", false);
-    expect(registry.get("gpt-4.1")!.enabled).toBe(false);
+    registry.setEnabled(DEFAULT_LOCAL_MODEL, false);
+    expect(registry.get(DEFAULT_LOCAL_MODEL)!.enabled).toBe(false);
 
-    registry.setEnabled("gpt-4.1", true);
-    expect(registry.get("gpt-4.1")!.enabled).toBe(true);
+    registry.setEnabled(DEFAULT_LOCAL_MODEL, true);
+    expect(registry.get(DEFAULT_LOCAL_MODEL)!.enabled).toBe(true);
   });
 
   it("refreshFromApi updates from API response", () => {
@@ -176,7 +179,7 @@ describe("ModelRegistry", () => {
     registry.refreshFromApi([
       {
         id: "new-api-model",
-        provider: "conway",
+        provider: "glm",
         display_name: "New API Model",
         max_tokens: 8192,
         context_window: 200000,
@@ -188,7 +191,7 @@ describe("ModelRegistry", () => {
 
     const entry = registry.get("new-api-model");
     expect(entry).toBeDefined();
-    expect(entry!.provider).toBe("conway");
+    expect(entry!.provider).toBe("glm");
     expect(entry!.costPer1kInput).toBe(15);
   });
 
@@ -196,7 +199,7 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry(db);
     registry.initialize();
 
-    const cost = registry.getCostPer1k("gpt-4.1");
+    const cost = registry.getCostPer1k(FULL_TIER_MODEL);
     expect(cost.input).toBeGreaterThan(0);
     expect(cost.output).toBeGreaterThan(0);
   });
@@ -227,19 +230,19 @@ describe("InferenceRouter", () => {
     it("returns correct model for normal/agent_turn", () => {
       const model = router.selectModel("normal", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gpt-5.2");
+      expect(model!.modelId).toBe(DEFAULT_LOCAL_MODEL);
     });
 
     it("returns cheaper model for low_compute tier", () => {
       const model = router.selectModel("low_compute", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gpt-5-mini");
+      expect(model!.modelId).toBe(DEFAULT_LOCAL_MODEL);
     });
 
     it("returns minimal model for critical tier", () => {
       const model = router.selectModel("critical", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gpt-5-mini");
+      expect(model!.modelId).toBe(DEFAULT_LOCAL_MODEL);
     });
 
     it("returns null for dead tier", () => {
@@ -247,16 +250,28 @@ describe("InferenceRouter", () => {
       expect(model).toBeNull();
     });
 
-    it("returns null for critical tier with non-essential task", () => {
+    it("returns the free local model for critical-tier summarization", () => {
       const model = router.selectModel("critical", "summarization");
-      expect(model).toBeNull();
+      expect(model).not.toBeNull();
+      expect(model!.modelId).toBe(DEFAULT_LOCAL_MODEL);
     });
 
-    it("skips disabled models and picks next candidate", () => {
-      registry.setEnabled("gpt-5.2", false);
-      const model = router.selectModel("normal", "agent_turn");
-      expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gpt-5-mini");
+    it("uses GLM for high tier when local fallback is disabled and GLM is available", () => {
+      const originalGlmApiKey = process.env.GLM_API_KEY;
+      process.env.GLM_API_KEY = "test-glm-key";
+
+      try {
+        registry.setEnabled(DEFAULT_LOCAL_MODEL, false);
+        const model = router.selectModel("high", "agent_turn");
+        expect(model).not.toBeNull();
+        expect(model!.modelId).toBe(FULL_TIER_MODEL);
+      } finally {
+        if (originalGlmApiKey === undefined) {
+          delete process.env.GLM_API_KEY;
+        } else {
+          process.env.GLM_API_KEY = originalGlmApiKey;
+        }
+      }
     });
   });
 
@@ -279,112 +294,139 @@ describe("InferenceRouter", () => {
       );
 
       expect(result.content).toBe("Hello!");
-      expect(result.model).toBe("gpt-5.2");
+      expect(result.model).toBe(DEFAULT_LOCAL_MODEL);
       expect(result.finishReason).toBe("stop");
 
       // Verify cost was recorded
       const costs = inferenceGetSessionCosts(db, "test-session");
       expect(costs.length).toBe(1);
-      expect(costs[0].model).toBe("gpt-5.2");
+      expect(costs[0].model).toBe(DEFAULT_LOCAL_MODEL);
     });
 
     it("computes actualCostCents accurately from token usage", async () => {
-      // gpt-5.2 has costPer1kInput=20, costPer1kOutput=80 (hundredths of cents)
-      // Formula: Math.ceil((input/1000)*costPer1kInput/100 + (output/1000)*costPer1kOutput/100)
-      const mockChat = async (_msgs: any[], _opts: any) => ({
-        message: { content: "result", role: "assistant" },
-        usage: { promptTokens: 1000, completionTokens: 500 },
-        finishReason: "stop",
-      });
+      const originalGlmApiKey = process.env.GLM_API_KEY;
+      process.env.GLM_API_KEY = "test-glm-key";
 
-      const result = await router.route(
-        {
-          messages: [{ role: "user", content: "test cost" }],
-          taskType: "agent_turn",
-          tier: "normal",
-          sessionId: "cost-accuracy-session",
-        },
-        mockChat,
-      );
+      try {
+        const mockChat = async (_msgs: any[], _opts: any) => ({
+          message: { content: "result", role: "assistant" },
+          usage: { promptTokens: 1000, completionTokens: 500 },
+          finishReason: "stop",
+        });
 
-      // Verify cost is computed correctly
-      // (1000/1000)*300/100 + (500/1000)*1500/100 = 3 + 7.5 = 10.5 => ceil = 11
-      expect(result.costCents).toBeGreaterThan(0);
-      expect(typeof result.costCents).toBe("number");
-      expect(Number.isInteger(result.costCents)).toBe(true);
+        const result = await router.route(
+          {
+            messages: [{ role: "user", content: "test cost" }],
+            taskType: "agent_turn",
+            tier: "high",
+            sessionId: "cost-accuracy-session",
+          },
+          mockChat,
+        );
 
-      // Verify the recorded cost matches
-      const costs = inferenceGetSessionCosts(db, "cost-accuracy-session");
-      expect(costs.length).toBe(1);
-      expect(costs[0].costCents).toBe(result.costCents);
-      expect(costs[0].inputTokens).toBe(1000);
-      expect(costs[0].outputTokens).toBe(500);
+        // glm-5.1 pricing is 20/80 hundredths of cents per 1k tokens.
+        // (1000/1000)*20/100 + (500/1000)*80/100 = 0.2 + 0.4 = 0.6 => ceil = 1.
+        expect(result.model).toBe(FULL_TIER_MODEL);
+        expect(result.costCents).toBe(1);
+
+        const costs = inferenceGetSessionCosts(db, "cost-accuracy-session");
+        expect(costs.length).toBe(1);
+        expect(costs[0].model).toBe(FULL_TIER_MODEL);
+        expect(costs[0].costCents).toBe(result.costCents);
+        expect(costs[0].inputTokens).toBe(1000);
+        expect(costs[0].outputTokens).toBe(500);
+      } finally {
+        if (originalGlmApiKey === undefined) {
+          delete process.env.GLM_API_KEY;
+        } else {
+          process.env.GLM_API_KEY = originalGlmApiKey;
+        }
+      }
     });
 
     it("returns error when budget is exhausted", async () => {
-      const strictBudget = new InferenceBudgetTracker(db, {
-        ...DEFAULT_MODEL_STRATEGY_CONFIG,
-        perCallCeilingCents: 1, // Very low ceiling
-      });
-      const strictRouter = new InferenceRouter(db, registry, strictBudget);
+      const originalGlmApiKey = process.env.GLM_API_KEY;
+      process.env.GLM_API_KEY = "test-glm-key";
 
-      // Insert a bunch of text to inflate the cost estimate
-      const longMessage = "x".repeat(100000);
-      const result = await strictRouter.route(
-        {
-          messages: [{ role: "user", content: longMessage }],
-          taskType: "agent_turn",
-          tier: "normal",
-          sessionId: "test-session",
-          maxTokens: 50000,
-        },
-        async () => ({ message: { content: "" }, usage: { promptTokens: 0, completionTokens: 0 }, finishReason: "stop" }),
-      );
+      try {
+        const strictBudget = new InferenceBudgetTracker(db, {
+          ...DEFAULT_MODEL_STRATEGY_CONFIG,
+          perCallCeilingCents: 1,
+        });
+        const strictRouter = new InferenceRouter(db, registry, strictBudget);
 
-      expect(result.finishReason).toBe("budget_exceeded");
+        const longMessage = "x".repeat(100000);
+        const result = await strictRouter.route(
+          {
+            messages: [{ role: "user", content: longMessage }],
+            taskType: "agent_turn",
+            tier: "high",
+            sessionId: "test-session",
+            maxTokens: 50000,
+          },
+          async () => ({ message: { content: "" }, usage: { promptTokens: 0, completionTokens: 0 }, finishReason: "stop" }),
+        );
+
+        expect(result.finishReason).toBe("budget_exceeded");
+      } finally {
+        if (originalGlmApiKey === undefined) {
+          delete process.env.GLM_API_KEY;
+        } else {
+          process.env.GLM_API_KEY = originalGlmApiKey;
+        }
+      }
     });
 
     it("enforces session budget when configured", async () => {
-      const sessionBudget = new InferenceBudgetTracker(db, {
-        ...DEFAULT_MODEL_STRATEGY_CONFIG,
-        sessionBudgetCents: 5,
-      });
-      const sessionRouter = new InferenceRouter(db, registry, sessionBudget);
+      const originalGlmApiKey = process.env.GLM_API_KEY;
+      process.env.GLM_API_KEY = "test-glm-key";
 
-      // Record enough cost to nearly exhaust the session budget
-      sessionBudget.recordCost({
-        sessionId: "budget-session",
-        turnId: null,
-        model: "gpt-4.1",
-        provider: "openai",
-        inputTokens: 1000,
-        outputTokens: 500,
-        costCents: 4,
-        latencyMs: 100,
-        tier: "normal",
-        taskType: "agent_turn",
-        cacheHit: false,
-      });
+      try {
+        const sessionBudget = new InferenceBudgetTracker(db, {
+          ...DEFAULT_MODEL_STRATEGY_CONFIG,
+          sessionBudgetCents: 5,
+        });
+        const sessionRouter = new InferenceRouter(db, registry, sessionBudget);
 
-      // Use a long message so the estimated cost pushes past the 5c limit
-      const longMessage = "x".repeat(100000);
-      const result = await sessionRouter.route(
-        {
-          messages: [{ role: "user", content: longMessage }],
-          taskType: "agent_turn",
-          tier: "normal",
+        sessionBudget.recordCost({
           sessionId: "budget-session",
-          maxTokens: 50000,
-        },
-        async () => ({
-          message: { content: "" },
-          usage: { promptTokens: 0, completionTokens: 0 },
-          finishReason: "stop",
-        }),
-      );
+          turnId: null,
+          model: FULL_TIER_MODEL,
+          provider: "glm",
+          inputTokens: 1000,
+          outputTokens: 500,
+          costCents: 4,
+          latencyMs: 100,
+          tier: "high",
+          taskType: "agent_turn",
+          cacheHit: false,
+        });
 
-      expect(result.finishReason).toBe("budget_exceeded");
-      expect(result.content).toContain("Session budget exceeded");
+        const longMessage = "x".repeat(100000);
+        const result = await sessionRouter.route(
+          {
+            messages: [{ role: "user", content: longMessage }],
+            taskType: "agent_turn",
+            tier: "high",
+            sessionId: "budget-session",
+            maxTokens: 50000,
+          },
+          async () => ({
+            message: { content: "" },
+            usage: { promptTokens: 0, completionTokens: 0 },
+            finishReason: "stop",
+          }),
+        );
+
+        expect(result.finishReason).toBe("budget_exceeded");
+        expect(result.content).toContain("Session budget exceeded");
+      } finally {
+        if (originalGlmApiKey === undefined) {
+          delete process.env.GLM_API_KEY;
+        } else {
+          process.env.GLM_API_KEY = originalGlmApiKey;
+        }
+      }
     });
 
     it("passes abort signal to inference function", async () => {
@@ -703,8 +745,7 @@ describe("Routing Matrix", () => {
     expect(DEFAULT_ROUTING_MATRIX.critical.agent_turn.candidates.length).toBeGreaterThan(0);
     expect(DEFAULT_ROUTING_MATRIX.critical.heartbeat_triage.candidates.length).toBeGreaterThan(0);
     expect(DEFAULT_ROUTING_MATRIX.critical.safety_check.candidates.length).toBeGreaterThan(0);
-    // Non-essential tasks should have no candidates
-    expect(DEFAULT_ROUTING_MATRIX.critical.summarization.candidates).toHaveLength(0);
+    expect(DEFAULT_ROUTING_MATRIX.critical.summarization.candidates.length).toBeGreaterThan(0);
     expect(DEFAULT_ROUTING_MATRIX.critical.planning.candidates).toHaveLength(0);
   });
 });
@@ -734,22 +775,25 @@ describe("Task Timeouts", () => {
 describe("Static Model Baseline", () => {
   it("contains expected models", () => {
     const ids = STATIC_MODEL_BASELINE.map((m) => m.modelId);
-    expect(ids).toContain("gpt-4.1");
-    expect(ids).toContain("gpt-4.1-mini");
-    expect(ids).toContain("gpt-4.1-nano");
-    expect(ids).toContain("gpt-5.2");
-    expect(ids).toContain("gpt-5.3");
+    expect(ids).toContain(DEFAULT_LOCAL_MODEL);
+    expect(ids).toContain(FULL_TIER_MODEL);
   });
 
-  it("all models have positive pricing", () => {
-    for (const model of STATIC_MODEL_BASELINE) {
-      expect(model.costPer1kInput).toBeGreaterThan(0);
-      expect(model.costPer1kOutput).toBeGreaterThan(0);
-    }
+  it("baseline models reflect local-free and burst-priced tiers", () => {
+    const gemma = STATIC_MODEL_BASELINE.find((m) => m.modelId === DEFAULT_LOCAL_MODEL);
+    const glm = STATIC_MODEL_BASELINE.find((m) => m.modelId === FULL_TIER_MODEL);
+
+    expect(gemma).toBeDefined();
+    expect(gemma!.costPer1kInput).toBe(0);
+    expect(gemma!.costPer1kOutput).toBe(0);
+
+    expect(glm).toBeDefined();
+    expect(glm!.costPer1kInput).toBeGreaterThan(0);
+    expect(glm!.costPer1kOutput).toBeGreaterThan(0);
   });
 
   it("all models have valid provider", () => {
-    const validProviders = ["openai", "anthropic", "conway", "other"];
+    const validProviders = ["openai", "anthropic", "glm", "ollama", "other"];
     for (const model of STATIC_MODEL_BASELINE) {
       expect(validProviders).toContain(model.provider);
     }
@@ -954,9 +998,9 @@ describe("Inference DB Helpers", () => {
 
 describe("DEFAULT_MODEL_STRATEGY_CONFIG", () => {
   it("has sensible defaults", () => {
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.inferenceModel).toBe("gpt-5.2");
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.lowComputeModel).toBe("gpt-5-mini");
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.criticalModel).toBe("gpt-5-mini");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.inferenceModel).toBe(DEFAULT_LOCAL_MODEL);
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.lowComputeModel).toBe(DEFAULT_LOCAL_MODEL);
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.criticalModel).toBe(DEFAULT_LOCAL_MODEL);
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.enableModelFallback).toBe(true);
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.hourlyBudgetCents).toBe(0); // no limit
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.sessionBudgetCents).toBe(0); // no limit

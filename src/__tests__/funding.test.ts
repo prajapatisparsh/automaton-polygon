@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { executeFundingStrategies } from "../survival/funding.js";
 import {
-  MockConwayClient,
+  MockRuntimeClient,
   createTestDb,
   createTestIdentity,
   createTestConfig,
@@ -16,11 +16,11 @@ import type { AutomatonDatabase } from "../types.js";
 
 describe("executeFundingStrategies", () => {
   let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     db = createTestDb();
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
     conway.creditsCents = 5; // low balance
   });
 

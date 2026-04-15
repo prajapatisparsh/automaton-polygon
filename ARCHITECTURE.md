@@ -153,12 +153,13 @@ src/
       validation.ts          Input format validation rules
 
   conway/                  Conway API integration
-    client.ts              ConwayClient (sandbox ops, credits, domains)
-    inference.ts           InferenceClient (chat completions)
-    http-client.ts         Resilient HTTP (retry, backoff, circuit breaker)
-    credits.ts             Survival tier calculation
-    topup.ts               x402 credit topup from USDC
-    x402.ts                x402 payment protocol + USDC balance
+    payments/                Runtime and treasury integration
+      runtime-client.ts      RuntimeClient (local exec, treasury, runtime compat)
+      polygon.ts             Polygon USDC balance + transfer helpers
+      http-client.ts         Resilient HTTP (retry, backoff, circuit breaker)
+      credits.ts             Treasury tier calculation helpers
+      x402-client.ts         Client-side x402 payment flow
+      x402-server.ts         Server-side x402 settlement verification
 
   heartbeat/               Background daemon
     daemon.ts              Daemon lifecycle (start/stop/forceRun)
@@ -503,19 +504,19 @@ Each automaton has a unique Ethereum identity:
 
 ---
 
-## Conway Client
+## Runtime Client
 
-**File:** `src/conway/client.ts`
+**File:** `src/payments/runtime-client.ts`
 
-The `ConwayClient` interface provides all Conway API operations:
+The `RuntimeClient` interface provides the runtime compatibility surface used by the agent loop, heartbeat, replication, and self-modification paths:
 
-- **Sandbox ops:** `exec`, `writeFile`, `readFile`, `exposePort`, `removePort`
-- **Sandbox management:** `createSandbox`, `deleteSandbox`, `listSandboxes`
-- **Credits:** `getCreditsBalance`, `getCreditsPricing`, `transferCredits`
+- **Runtime ops:** `exec`, `writeFile`, `readFile`, `exposePort`, `removePort`
+- **Runtime management:** `createSandbox`, `deleteSandbox`, `listSandboxes`
+- **Treasury:** `getCreditsBalance`, `getCreditsPricing`, `transferCredits`
 - **Domains:** `searchDomains`, `registerDomain`, `listDnsRecords`, `addDnsRecord`, `deleteDnsRecord`
 - **Models:** `listModels`
 
-**Auto-routing:** When `sandboxId` is empty, all operations execute locally (shell exec, filesystem I/O). When set, routes through Conway API. On 403 errors (mismatched API key), falls back to local execution.
+**Current implementation:** `createLocalRuntimeClient()` is local-first. Shell and filesystem operations execute on the host runtime, port exposure returns localhost URLs, treasury methods map to Polygon USDC balance and transfers, and `createScopedClient()` preserves child-runtime compatibility without requiring a remote Conway control plane.
 
 **Resilient HTTP** (`http-client.ts`): All API calls go through `ResilientHttpClient` with configurable retries (default 3 on 429/5xx), jittered exponential backoff, circuit breaker (5 failures -> 60s open), and idempotency key support for mutating operations.
 
@@ -693,12 +694,12 @@ AutomatonConfig
   genesisPrompt           Seed instruction from creator
   creatorMessage          Optional creator message (shown on first run)
   creatorAddress          Creator's Ethereum address
-  sandboxId               Conway sandbox ID (empty = local mode)
-  conwayApiUrl            Conway API URL (default: https://api.conway.tech)
-  conwayApiKey            SIWE-provisioned API key
+  runtimeId               Local runtime identifier (default: local-runtime)
+  ollamaBaseUrl           Local Ollama URL (default: http://localhost:11434)
+  rpcUrl                  Polygon RPC URL (default: https://polygon-rpc.com)
   openaiApiKey            Optional BYOK OpenAI key
   anthropicApiKey         Optional BYOK Anthropic key
-  inferenceModel          Default model (default: gpt-5.2)
+  inferenceModel          Default model (default: gemma4:e4b)
   maxTokensPerTurn        Max tokens per inference call (default: 4096)
   heartbeatConfigPath     Path to heartbeat.yml
   dbPath                  Path to SQLite database

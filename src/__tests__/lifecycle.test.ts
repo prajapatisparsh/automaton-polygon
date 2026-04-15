@@ -26,10 +26,10 @@ import {
   DEFAULT_CHILD_HEALTH_CONFIG,
   MESSAGE_LIMITS,
 } from "../types.js";
-import type { ChildLifecycleState, ConwayClient, ExecResult } from "../types.js";
+import type { ChildLifecycleState, RuntimeClient, ExecResult } from "../types.js";
 import { MIGRATION_V7 } from "../state/schema.js";
 import {
-  MockConwayClient,
+  MockRuntimeClient,
   MockSocialClient,
   createTestIdentity,
   createTestConfig,
@@ -77,6 +77,7 @@ function createTestRawDb(): InstanceType<typeof Database> {
       creator_message TEXT,
       funded_amount_cents INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'spawning',
+      chain_type TEXT NOT NULL DEFAULT 'evm',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       last_checked TEXT
     );
@@ -314,12 +315,12 @@ describe("ChildLifecycle", () => {
 describe("ChildHealthMonitor", () => {
   let db: InstanceType<typeof Database>;
   let lifecycle: ChildLifecycle;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     db = createTestRawDb();
     lifecycle = new ChildLifecycle(db);
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
   });
 
   afterEach(() => {
@@ -433,12 +434,12 @@ describe("ChildHealthMonitor", () => {
 describe("SandboxCleanup", () => {
   let db: InstanceType<typeof Database>;
   let lifecycle: ChildLifecycle;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     db = createTestRawDb();
     lifecycle = new ChildLifecycle(db);
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
   });
 
   afterEach(() => {
@@ -527,11 +528,11 @@ describe("SandboxCleanup", () => {
 
 describe("Constitution", () => {
   let db: InstanceType<typeof Database>;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     db = createTestRawDb();
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
   });
 
   afterEach(() => {
@@ -743,7 +744,7 @@ describe("pruneDeadChildren", () => {
       getChildren: () => {
         const rows = db.prepare("SELECT * FROM children ORDER BY created_at DESC").all() as any[];
         return rows.map((r: any) => ({
-          id: r.id, name: r.name, address: r.address, sandboxId: r.sandbox_id,
+          id: r.id, name: r.name, address: r.address, runtimeId: r.sandbox_id,
           genesisPrompt: r.genesis_prompt, fundedAmountCents: r.funded_amount_cents,
           status: r.status, createdAt: r.created_at, lastChecked: r.last_checked,
         }));

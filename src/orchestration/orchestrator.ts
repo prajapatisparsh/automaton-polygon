@@ -905,7 +905,7 @@ export class Orchestrator {
       address: spawned.address,
       name: spawned.name,
       role: task.agentRole ?? "generalist",
-      sandboxId: typeof spawned.sandboxId === "string" ? spawned.sandboxId : ulid(),
+      runtimeId: typeof spawned.runtimeId === "string" ? spawned.runtimeId : ulid(),
     });
 
     this.params.agentTracker.updateStatus(spawned.address, "running");

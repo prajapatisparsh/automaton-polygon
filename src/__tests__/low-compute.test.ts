@@ -4,7 +4,7 @@ import {
   getModelForTier,
   applyTierRestrictions,
 } from "../survival/low-compute.js";
-import { createInferenceClient } from "../conway/inference.js";
+import { createInferenceClient } from "../inference/client.js";
 import type { SurvivalTier } from "../types.js";
 
 describe("canRunInference", () => {
@@ -30,7 +30,7 @@ describe("canRunInference", () => {
 });
 
 describe("getModelForTier", () => {
-  const defaultModel = "gpt-5.2";
+  const defaultModel = "glm-5.1";
 
   it("returns default model for 'high' tier", () => {
     expect(getModelForTier("high", defaultModel)).toBe(defaultModel);
@@ -40,20 +40,20 @@ describe("getModelForTier", () => {
     expect(getModelForTier("normal", defaultModel)).toBe(defaultModel);
   });
 
-  it("returns gpt-5-mini for 'low_compute' tier", () => {
-    expect(getModelForTier("low_compute", defaultModel)).toBe("gpt-5-mini");
+  it("returns gemma4:e4b for 'low_compute' tier", () => {
+    expect(getModelForTier("low_compute", defaultModel)).toBe("gemma4:e4b");
   });
 
-  it("returns gpt-5-mini for 'critical' tier", () => {
-    expect(getModelForTier("critical", defaultModel)).toBe("gpt-5-mini");
+  it("returns gemma4:e4b for 'critical' tier", () => {
+    expect(getModelForTier("critical", defaultModel)).toBe("gemma4:e4b");
   });
 
-  it("returns gpt-5-mini for 'dead' tier", () => {
-    expect(getModelForTier("dead", defaultModel)).toBe("gpt-5-mini");
+  it("returns gemma4:e4b for 'dead' tier", () => {
+    expect(getModelForTier("dead", defaultModel)).toBe("gemma4:e4b");
   });
 
   it("returns the default model for 'normal' tier with custom default", () => {
-    expect(getModelForTier("normal", "gpt-5.2")).toBe("gpt-5.2");
+    expect(getModelForTier("normal", "glm-5.1")).toBe("glm-5.1");
   });
 
   it("returns a value for every tier", () => {
@@ -122,35 +122,33 @@ describe("applyTierRestrictions", () => {
 
 describe("createInferenceClient setLowComputeMode", () => {
   const baseOptions = {
-    apiUrl: "https://api.conway.tech",
-    apiKey: "test-key",
-    defaultModel: "gpt-5.2",
+    defaultModel: "glm-5.1",
     maxTokens: 4096,
   };
 
   it("uses lowComputeModel when provided", () => {
     const client = createInferenceClient({
       ...baseOptions,
-      lowComputeModel: "gpt-5-mini",
+      lowComputeModel: "gemma4:e4b",
     });
     client.setLowComputeMode(true);
-    expect(client.getDefaultModel()).toBe("gpt-5-mini");
+    expect(client.getDefaultModel()).toBe("gemma4:e4b");
   });
 
-  it("falls back to gpt-5-mini when no lowComputeModel is provided", () => {
+  it("falls back to gemma4:e4b when no lowComputeModel is provided", () => {
     const client = createInferenceClient(baseOptions);
     client.setLowComputeMode(true);
-    expect(client.getDefaultModel()).toBe("gpt-5-mini");
+    expect(client.getDefaultModel()).toBe("gemma4:e4b");
   });
 
   it("restores defaultModel when low compute mode is disabled", () => {
     const client = createInferenceClient({
       ...baseOptions,
-      lowComputeModel: "gpt-5-mini",
+      lowComputeModel: "gemma4:e4b",
     });
     client.setLowComputeMode(true);
-    expect(client.getDefaultModel()).toBe("gpt-5-mini");
+    expect(client.getDefaultModel()).toBe("gemma4:e4b");
     client.setLowComputeMode(false);
-    expect(client.getDefaultModel()).toBe("gpt-5.2");
+    expect(client.getDefaultModel()).toBe("glm-5.1");
   });
 });

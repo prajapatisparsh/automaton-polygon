@@ -21,7 +21,7 @@ function createMockAutomatonDb(db: BetterSqlite3.Database) {
              id,
              name,
              address,
-             sandbox_id        AS sandboxId,
+             sandbox_id        AS runtimeId,
              genesis_prompt    AS genesisPrompt,
              creator_message   AS creatorMessage,
              funded_amount_cents AS fundedAmountCents,

@@ -1,5 +1,5 @@
 /**
- * Conway Automaton - Type Definitions
+ * Automaton Runtime - Type Definitions
  *
  * All shared interfaces for the sovereign AI agent runtime.
  */
@@ -14,7 +14,7 @@ export interface AutomatonIdentity {
   address: string;
   account: PrivateKeyAccount;
   creatorAddress: string;
-  sandboxId: string;
+  runtimeId: string;
   apiKey: string;
   createdAt: string;
   /** Chain type for this automaton's wallet identity. Defaults to "evm". */
@@ -30,6 +30,8 @@ export interface WalletData {
   createdAt: string;
   /** Chain type for this wallet. Missing = "evm" for backward compat. */
   chainType?: ChainType;
+  /** EVM chain ID for wallet-aware tooling. Polygon mainnet = 137. */
+  chainId?: number;
 }
 
 export interface ProvisionResult {
@@ -45,10 +47,10 @@ export interface AutomatonConfig {
   genesisPrompt: string;
   creatorMessage?: string;
   creatorAddress: string;
-  registeredWithConway: boolean;
-  sandboxId: string;
-  conwayApiUrl: string;
-  conwayApiKey: string;
+  registeredWithConway?: boolean;
+  runtimeId: string;
+  conwayApiUrl?: string;
+  conwayApiKey?: string;
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
@@ -78,8 +80,7 @@ export interface AutomatonConfig {
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
-  conwayApiUrl: "https://api.conway.tech",
-  inferenceModel: "gpt-5.2",
+  inferenceModel: "gemma4:e4b",
   maxTokensPerTurn: 4096,
   heartbeatConfigPath: "~/.automaton/heartbeat.yml",
   dbPath: "~/.automaton/state.db",
@@ -89,6 +90,9 @@ export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
   maxChildren: 3,
   maxTurnsPerCycle: 25,
   childSandboxMemoryMb: 1024,
+  runtimeId: "local-runtime",
+  ollamaBaseUrl: "http://localhost:11434",
+  rpcUrl: "https://polygon-rpc.com",
   socialRelayUrl: "https://social.conway.tech",
 };
 
@@ -153,7 +157,7 @@ export interface AutomatonTool {
 
 export type ToolCategory =
   | "vm"
-  | "conway"
+  | "runtime"
   | "self_mod"
   | "financial"
   | "survival"
@@ -167,7 +171,7 @@ export interface ToolContext {
   identity: AutomatonIdentity;
   config: AutomatonConfig;
   db: AutomatonDatabase;
-  conway: ConwayClient;
+  conway: RuntimeClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
 }
@@ -214,7 +218,7 @@ export interface HeartbeatPingPayload {
   usdcBalance: number;
   uptimeSeconds: number;
   version: string;
-  sandboxId: string;
+  runtimeId: string;
   timestamp: string;
 }
 
@@ -229,11 +233,11 @@ export interface FinancialState {
 export type SurvivalTier = "dead" | "critical" | "low_compute" | "normal" | "high";
 
 export const SURVIVAL_THRESHOLDS = {
-  high: 500, // > $5.00 in cents
-  normal: 50, // > $0.50 in cents
-  low_compute: 10, // $0.10 - $0.50
-  critical: 0, // >= $0.00 (zero credits = critical, agent stays alive)
-  dead: -1, // negative balance = truly dead
+  high: 500, // FULL: > 5 USDC
+  normal: 500, // Legacy alias for FULL tier
+  low_compute: 100, // LOW: 1-5 USDC
+  critical: 0, // CRITICAL: > 0 and < 1 USDC
+  dead: 0, // DEAD: 0 USDC
 } as const;
 
 export interface Transaction {
@@ -352,16 +356,16 @@ export interface InferenceToolDefinition {
   };
 }
 
-// ─── Conway Client ───────────────────────────────────────────────
+// ─── Runtime Client ──────────────────────────────────────────────
 
-export interface ConwayClient {
+export interface RuntimeClient {
   exec(command: string, timeout?: number): Promise<ExecResult>;
   writeFile(path: string, content: string): Promise<void>;
   readFile(path: string): Promise<string>;
   exposePort(port: number): Promise<PortInfo>;
   removePort(port: number): Promise<void>;
   createSandbox(options: CreateSandboxOptions): Promise<SandboxInfo>;
-  deleteSandbox(sandboxId: string): Promise<void>;
+  deleteSandbox(runtimeId: string): Promise<void>;
   listSandboxes(): Promise<SandboxInfo[]>;
   getCreditsBalance(): Promise<number>;
   getCreditsPricing(): Promise<PricingTier[]>;
@@ -396,8 +400,8 @@ export interface ConwayClient {
   deleteDnsRecord(domain: string, recordId: string): Promise<void>;
   // Model discovery
   listModels(): Promise<ModelInfo[]>;
-  /** Create a new client scoped to a specific sandbox ID. */
-  createScopedClient(targetSandboxId: string): ConwayClient;
+  /** Create a new client scoped to a specific runtime ID. */
+  createScopedClient(targetRuntimeId: string): RuntimeClient;
 }
 
 export interface ExecResult {
@@ -409,7 +413,7 @@ export interface ExecResult {
 export interface PortInfo {
   port: number;
   publicUrl: string;
-  sandboxId: string;
+  runtimeId: string;
 }
 
 export interface CreateSandboxOptions {
@@ -586,7 +590,7 @@ export const DEFAULT_TREASURY_POLICY: TreasuryPolicy = {
   maxDailyTransferCents: 25000,
   minimumReserveCents: 1000,
   maxX402PaymentCents: 100,
-  x402AllowedDomains: ['conway.tech'],
+  x402AllowedDomains: ['localhost', '127.0.0.1'],
   transferCooldownMs: 0,
   maxTransfersPerTurn: 2,
   maxInferenceDailyCents: 50000,
@@ -815,7 +819,7 @@ export interface ChildAutomaton {
   id: string;
   name: string;
   address: string;
-  sandboxId: string;
+  runtimeId: string;
   genesisPrompt: string;
   creatorMessage?: string;
   fundedAmountCents: number;
@@ -897,7 +901,7 @@ export interface HeartbeatLegacyContext {
   identity: AutomatonIdentity;
   config: AutomatonConfig;
   db: AutomatonDatabase;
-  conway: ConwayClient;
+  conway: RuntimeClient;
   social?: SocialClientInterface;
 }
 
@@ -1140,7 +1144,7 @@ export const DEFAULT_MEMORY_BUDGET: MemoryBudget = {
 
 // === Phase 2.3: Inference & Model Strategy Types ===
 
-export type ModelProvider = "openai" | "anthropic" | "conway" | "ollama" | "other";
+export type ModelProvider = "openai" | "anthropic" | "glm" | "ollama" | "other";
 
 export type InferenceTaskType =
   | "agent_turn"

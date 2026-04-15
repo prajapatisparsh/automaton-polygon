@@ -4,7 +4,7 @@
  * Validates wallet address checking, spawn cleanup on failure,
  * and prevention of funding to zero-address wallets.
  *
- * Updated for Phase 3.1: spawnChild now uses ConwayClient interface
+ * Updated for Phase 3.1: spawnChild now uses RuntimeClient interface
  * directly instead of raw fetch-based execInSandbox/writeInSandbox.
  */
 
@@ -14,7 +14,7 @@ import { SandboxCleanup } from "../replication/cleanup.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { pruneDeadChildren } from "../replication/lineage.js";
 import {
-  MockConwayClient,
+  MockRuntimeClient,
   createTestDb,
   createTestIdentity,
 } from "./mocks.js";
@@ -87,7 +87,7 @@ describe("isValidWalletAddress", () => {
 // ─── spawnChild ───────────────────────────────────────────────
 
 describe("spawnChild", () => {
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
   let db: AutomatonDatabase;
   const identity = createTestIdentity();
   const genesis: GenesisConfig = {
@@ -102,7 +102,7 @@ describe("spawnChild", () => {
   const zeroAddress = "0x" + "0".repeat(40);
 
   beforeEach(() => {
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
     db = createTestDb();
   });
 
@@ -204,12 +204,12 @@ describe("spawnChild", () => {
 // ─── SandboxCleanup ──────────────────────────────────────────
 
 describe("SandboxCleanup", () => {
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
   let db: AutomatonDatabase;
   let lifecycle: ChildLifecycle;
 
   beforeEach(() => {
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
     db = createTestDb();
     // Apply lifecycle events migration
     db.raw.exec(MIGRATION_V7);
@@ -261,12 +261,12 @@ describe("SandboxCleanup", () => {
 
 describe("pruneDeadChildren", () => {
   let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     db = createTestDb();
     db.raw.exec(MIGRATION_V7);
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
   });
 
   afterEach(() => {

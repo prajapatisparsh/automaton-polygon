@@ -6,14 +6,14 @@
  */
 
 import type { Database as DatabaseType } from "better-sqlite3";
-import type { ConwayClient } from "../types.js";
+import type { RuntimeClient } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
 import { createLogger } from "../observability/logger.js";
 const logger = createLogger("replication.cleanup");
 
 export class SandboxCleanup {
   constructor(
-    private conway: ConwayClient,
+    private conway: RuntimeClient,
     private lifecycle: ChildLifecycle,
     private db: DatabaseType,
   ) {}

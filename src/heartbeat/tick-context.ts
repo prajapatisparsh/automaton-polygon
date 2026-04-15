@@ -9,12 +9,12 @@
 import type BetterSqlite3 from "better-sqlite3";
 
 import type {
-  ConwayClient,
+  RuntimeClient,
   HeartbeatConfig,
   TickContext,
 } from "../types.js";
-import { getSurvivalTier } from "../conway/credits.js";
-import { getUsdcBalance } from "../conway/x402.js";
+import { getSurvivalTier } from "../payments/credits.js";
+import { getUSDCBalance, toUsdcCents } from "../payments/polygon.js";
 import { createLogger } from "../observability/logger.js";
 
 type DatabaseType = BetterSqlite3.Database;
@@ -32,39 +32,30 @@ function generateTickId(): string {
  * Build a TickContext for the current tick.
  *
  * - Generates a unique tickId
- * - Fetches credit balance ONCE via conway.getCreditsBalance()
- * - Fetches USDC balance ONCE via getUsdcBalance()
- * - Derives survivalTier from credit balance
+ * - Fetches USDC balance ONCE via Polygon USDC balanceOf()
+ * - Derives survivalTier from the Polygon treasury balance
  * - Reads lowComputeMultiplier from config
  */
 export async function buildTickContext(
   db: DatabaseType,
-  conway: ConwayClient,
+  _conway: RuntimeClient,
   config: HeartbeatConfig,
   walletAddress?: string,
-  chainType?: string,
+  _chainType?: string,
 ): Promise<TickContext> {
   const tickId = generateTickId();
   const startedAt = new Date();
 
-  // Fetch balances ONCE
-  let creditBalance = 0;
-  try {
-    creditBalance = await conway.getCreditsBalance();
-  } catch (err: any) {
-    logger.error("Failed to fetch credit balance", err instanceof Error ? err : undefined);
-  }
-
   let usdcBalance = 0;
   if (walletAddress) {
     try {
-      const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
-      usdcBalance = await getUsdcBalance(walletAddress, network, chainType as any);
+      usdcBalance = await getUSDCBalance(walletAddress);
     } catch (err: any) {
       logger.error("Failed to fetch USDC balance", err instanceof Error ? err : undefined);
     }
   }
 
+  const creditBalance = toUsdcCents(usdcBalance);
   const survivalTier = getSurvivalTier(creditBalance);
   const lowComputeMultiplier = config.lowComputeMultiplier ?? 4;
 

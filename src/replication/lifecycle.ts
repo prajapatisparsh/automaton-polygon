@@ -23,12 +23,12 @@ export class ChildLifecycle {
   /**
    * Initialize a child record and insert the first lifecycle event.
    */
-  initChild(childId: string, name: string, sandboxId: string, genesisPrompt: string, chainType?: string): void {
+  initChild(childId: string, name: string, runtimeId: string, genesisPrompt: string, chainType?: string): void {
     // Insert child row into children table
     this.db.prepare(
       `INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status, created_at, chain_type)
        VALUES (?, ?, '', ?, ?, 'requested', datetime('now'), ?)`,
-    ).run(childId, name, sandboxId, genesisPrompt, chainType ?? "evm");
+    ).run(childId, name, runtimeId, genesisPrompt, chainType ?? "evm");
 
     // Record initial event
     const event: ChildLifecycleEventRow = {
@@ -93,12 +93,12 @@ export class ChildLifecycle {
   /**
    * Get all children in a given lifecycle state.
    */
-  getChildrenInState(state: ChildLifecycleState): Array<{ id: string; name: string; sandboxId: string; status: string; createdAt: string; lastChecked: string | null }> {
+  getChildrenInState(state: ChildLifecycleState): Array<{ id: string; name: string; runtimeId: string; status: string; createdAt: string; lastChecked: string | null }> {
     const rows = getChildrenByStatus(this.db, state);
     return rows.map((row: any) => ({
       id: row.id,
       name: row.name,
-      sandboxId: row.sandbox_id,
+      runtimeId: row.sandbox_id,
       status: row.status,
       createdAt: row.created_at,
       lastChecked: row.last_checked ?? null,

@@ -18,6 +18,8 @@ import type { ChainType } from "./chain.js";
 import { EvmChainIdentity, SolanaChainIdentity } from "./chain.js";
 import type { ChainIdentity } from "./chain.js";
 
+const POLYGON_CHAIN_ID = 137;
+
 /**
  * Create a stub PrivateKeyAccount for Solana wallets.
  * The stub has the Solana address but throws on any EVM signing attempt,
@@ -129,6 +131,7 @@ export async function getWallet(chainType?: ChainType): Promise<{
 
   const walletData: WalletData = {
     chainType: "evm",
+      chainId: POLYGON_CHAIN_ID,
     privateKey,
     createdAt: new Date().toISOString(),
   };

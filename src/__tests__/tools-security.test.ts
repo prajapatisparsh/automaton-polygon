@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createBuiltinTools, loadInstalledTools, executeTool } from "../agent/tools.js";
 import {
   MockInferenceClient,
-  MockConwayClient,
+  MockRuntimeClient,
   createTestDb,
   createTestIdentity,
   createTestConfig,
@@ -149,12 +149,12 @@ describe("write_file / edit_own_file protection parity", () => {
   let tools: AutomatonTool[];
   let ctx: ToolContext;
   let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
@@ -248,12 +248,12 @@ describe("read_file sensitive file blocking", () => {
   let tools: AutomatonTool[];
   let ctx: ToolContext;
   let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
@@ -317,12 +317,12 @@ describe("read_file fallback shell escaping", () => {
   let tools: AutomatonTool[];
   let ctx: ToolContext;
   let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
@@ -388,12 +388,12 @@ describe("exec tool forbidden command patterns", () => {
   let tools: AutomatonTool[];
   let ctx: ToolContext;
   let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
@@ -446,7 +446,7 @@ describe("exec tool forbidden command patterns", () => {
   it("blocks deleting own sandbox", async () => {
     const execTool = tools.find((t) => t.name === "exec")!;
     const result = await execTool.execute(
-      { command: `sandbox_delete ${ctx.identity.sandboxId}` },
+      { command: `sandbox_delete ${ctx.identity.runtimeId}` },
       ctx,
     );
     expect(result).toContain("Blocked");
@@ -474,7 +474,7 @@ describe("delete_sandbox self-preservation", () => {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway: new MockConwayClient(),
+      conway: new MockRuntimeClient(),
       inference: new MockInferenceClient(),
     };
   });
@@ -486,7 +486,7 @@ describe("delete_sandbox self-preservation", () => {
   it("reports sandbox deletion is disabled for own sandbox", async () => {
     const deleteTool = tools.find((t) => t.name === "delete_sandbox")!;
     const result = await deleteTool.execute(
-      { sandbox_id: ctx.identity.sandboxId },
+      { sandbox_id: ctx.identity.runtimeId },
       ctx,
     );
     expect(result).toContain("disabled");
@@ -508,12 +508,12 @@ describe("transfer_credits self-preservation", () => {
   let tools: AutomatonTool[];
   let ctx: ToolContext;
   let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
     conway.creditsCents = 10_000; // $100
     ctx = {
       identity: createTestIdentity(),
@@ -606,12 +606,12 @@ describe("package install inline validation", () => {
   let tools: AutomatonTool[];
   let ctx: ToolContext;
   let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),

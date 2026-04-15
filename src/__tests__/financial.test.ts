@@ -3,7 +3,7 @@
  *
  * Tests for all financial limit rules:
  * - x402_max_single denies payments > 100 cents
- * - x402_domain_allowlist denies non-conway.tech domains
+ * - x402_domain_allowlist denies non-allowlisted domains
  * - transfer_max_single denies transfers > 5000 cents
  * - transfer_hourly_cap denies when hourly total > 10000
  * - transfer_daily_cap denies when daily total > 25000
@@ -165,10 +165,10 @@ describe("Financial Policy Rules", () => {
   });
 
   describe("financial.x402_domain_allowlist", () => {
-    it("allows requests to conway.tech domains", () => {
+    it("allows requests to localhost domains", () => {
       const request = createRequest(
         mockX402Tool(),
-        { url: "https://api.conway.tech/v1/resource" },
+        { url: "https://localhost/v1/resource" },
         createMockSpendTracker(),
       );
 
@@ -191,7 +191,7 @@ describe("Financial Policy Rules", () => {
     it("denies requests to subdomains of non-allowlisted domains", () => {
       const request = createRequest(
         mockX402Tool(),
-        { url: "https://conway.tech.evil.com/drain" },
+        { url: "https://localhost.evil.com/drain" },
         createMockSpendTracker(),
       );
 
@@ -199,10 +199,10 @@ describe("Financial Policy Rules", () => {
       expect(decision.action).toBe("deny");
     });
 
-    it("allows subdomain of conway.tech", () => {
+    it("allows subdomain of localhost", () => {
       const request = createRequest(
         mockX402Tool(),
-        { url: "https://pay.conway.tech/endpoint" },
+        { url: "https://pay.localhost/endpoint" },
         createMockSpendTracker(),
       );
 

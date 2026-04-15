@@ -21,7 +21,7 @@ import {
   createTestDb,
   createTestIdentity,
   createTestConfig,
-  MockConwayClient,
+  MockRuntimeClient,
   MockInferenceClient,
 } from "./mocks.js";
 import type {
@@ -587,7 +587,7 @@ describe("Tool call IDs", () => {
     const tools = createBuiltinTools("test-sandbox-id");
     const identity = createTestIdentity();
     const config = createTestConfig();
-    const conway = new MockConwayClient();
+    const conway = new MockRuntimeClient();
     const appDb = createTestDb();
     const inference = new MockInferenceClient([]);
 
@@ -643,7 +643,7 @@ describe("executeTool with PolicyEngine", () => {
     const tools = createBuiltinTools("test-sandbox-id");
     const identity = createTestIdentity();
     const config = createTestConfig();
-    const conway = new MockConwayClient();
+    const conway = new MockRuntimeClient();
     const inference = new MockInferenceClient([]);
 
     const context: ToolContext = {
@@ -678,7 +678,7 @@ describe("executeTool with PolicyEngine", () => {
     const tools = createBuiltinTools("test-sandbox-id");
     const identity = createTestIdentity();
     const config = createTestConfig();
-    const conway = new MockConwayClient();
+    const conway = new MockRuntimeClient();
     const inference = new MockInferenceClient([]);
 
     const context: ToolContext = {
@@ -693,7 +693,7 @@ describe("executeTool with PolicyEngine", () => {
     const result = await executeTool("check_credits", {}, tools, context);
 
     expect(result.error).toBeUndefined();
-    expect(result.result).toContain("Credit balance");
+    expect(result.result).toContain("Treasury balance");
   });
 
   it("allows tool execution when policy allows", async () => {
@@ -702,7 +702,7 @@ describe("executeTool with PolicyEngine", () => {
     const tools = createBuiltinTools("test-sandbox-id");
     const identity = createTestIdentity();
     const config = createTestConfig();
-    const conway = new MockConwayClient();
+    const conway = new MockRuntimeClient();
     const inference = new MockInferenceClient([]);
 
     const context: ToolContext = {
@@ -729,6 +729,6 @@ describe("executeTool with PolicyEngine", () => {
     );
 
     expect(result.error).toBeUndefined();
-    expect(result.result).toContain("Credit balance");
+    expect(result.result).toContain("Treasury balance");
   });
 });

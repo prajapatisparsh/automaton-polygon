@@ -390,7 +390,7 @@ describe("Social Client", () => {
 // ─── 5. Agent Card Tests ────────────────────────────────────────
 
 describe("Agent Card", () => {
-  it("generateAgentCard does NOT include sandbox ID", async () => {
+  it("generateAgentCard does NOT include runtime ID", async () => {
     const { generateAgentCard } = await import("../registry/agent-card.js");
 
     const identity = {
@@ -398,7 +398,7 @@ describe("Agent Card", () => {
       address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" as `0x${string}`,
       account: {} as any,
       creatorAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" as `0x${string}`,
-      sandboxId: "sandbox-123",
+      runtimeId: "sandbox-123",
       apiKey: "key-123",
       createdAt: new Date().toISOString(),
     };
@@ -428,7 +428,7 @@ describe("Agent Card", () => {
       address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" as `0x${string}`,
       account: {} as any,
       creatorAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" as `0x${string}`,
-      sandboxId: "sandbox-123",
+      runtimeId: "sandbox-123",
       apiKey: "key-123",
       createdAt: new Date().toISOString(),
     };
@@ -458,7 +458,7 @@ describe("Agent Card", () => {
       address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" as `0x${string}`,
       account: {} as any,
       creatorAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" as `0x${string}`,
-      sandboxId: "sandbox-123",
+      runtimeId: "sandbox-123",
       apiKey: "key-123",
       createdAt: new Date().toISOString(),
     };
@@ -489,7 +489,7 @@ describe("Agent Card", () => {
         writtenFiles[path] = content;
       }),
       exec: vi.fn(async () => ({ stdout: "", stderr: "", exitCode: 0 })),
-      exposePort: vi.fn(async () => ({ port: 8004, publicUrl: "https://test.example.com", sandboxId: "sb-1" })),
+      exposePort: vi.fn(async () => ({ port: 8004, publicUrl: "https://test.example.com", runtimeId: "sb-1" })),
     } as any;
 
     const card = {

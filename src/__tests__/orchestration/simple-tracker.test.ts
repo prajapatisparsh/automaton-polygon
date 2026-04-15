@@ -7,13 +7,13 @@ function createMockAutomatonDb(db: BetterSqlite3.Database) {
   return {
     raw: db,
     getChildren: () => {
-      return db.prepare("SELECT id, name, address, sandbox_id AS sandboxId, genesis_prompt AS genesisPrompt, creator_message AS creatorMessage, funded_amount_cents AS fundedAmountCents, status, created_at AS createdAt, last_checked AS lastChecked FROM children").all();
+      return db.prepare("SELECT id, name, address, sandbox_id AS runtimeId, genesis_prompt AS genesisPrompt, creator_message AS creatorMessage, funded_amount_cents AS fundedAmountCents, status, created_at AS createdAt, last_checked AS lastChecked FROM children").all();
     },
     updateChildStatus: (id: string, status: string) => {
       db.prepare("UPDATE children SET status = ? WHERE id = ?").run(status, id);
     },
     insertChild: (child: any) => {
-      db.prepare("INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, creator_message, funded_amount_cents, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(child.id, child.name, child.address, child.sandboxId, child.genesisPrompt, child.creatorMessage, child.fundedAmountCents, child.status, child.createdAt);
+      db.prepare("INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, creator_message, funded_amount_cents, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(child.id, child.name, child.address, child.runtimeId, child.genesisPrompt, child.creatorMessage, child.fundedAmountCents, child.status, child.createdAt);
     },
   } as any;
 }
@@ -170,7 +170,7 @@ describe("orchestration/simple-tracker", () => {
         address: "0xnew",
         name: "NewAgent",
         role: "analyst",
-        sandboxId: "sb-42",
+        runtimeId: "sb-42",
       });
 
       const children = mockDb.getChildren() as any[];
@@ -183,7 +183,7 @@ describe("orchestration/simple-tracker", () => {
         address: "0xrole",
         name: "RoleAgent",
         role: "security-expert",
-        sandboxId: "sb-99",
+        runtimeId: "sb-99",
       });
 
       const row = db.prepare("SELECT genesis_prompt FROM children WHERE address = ?").get("0xrole") as

@@ -16,7 +16,7 @@
 import fs from "fs";
 import path from "path";
 import type {
-  ConwayClient,
+  RuntimeClient,
   AutomatonDatabase,
 } from "../types.js";
 import { logModification } from "./audit-log.js";
@@ -116,6 +116,11 @@ const MAX_DIFF_SIZE = 10_000;
 
 // ─── Path Validation ─────────────────────────────────────────
 
+function normalizeProtectionPath(filePath: string): string {
+  const resolved = path.resolve(filePath).replace(/\\/g, "/").toLowerCase();
+  return resolved.replace(/^[a-z]:/, "");
+}
+
 /**
  * Resolve a file path, following symlinks, to prevent traversal attacks.
  * Returns null if the path cannot be resolved or is suspicious.
@@ -156,29 +161,35 @@ function resolveAndValidatePath(filePath: string): string | null {
  * Check if a file path is protected from modification.
  */
 export function isProtectedFile(filePath: string): boolean {
-  const resolved = path.resolve(filePath);
+  const normalizedPath = normalizeProtectionPath(filePath);
+  const pathSegments = normalizedPath.split("/").filter(Boolean);
 
   // Check against protected file patterns using path-segment matching
   for (const pattern of PROTECTED_FILES) {
-    const patternResolved = path.resolve(pattern);
-    // Exact match on resolved paths
-    if (resolved === patternResolved) return true;
-    // Match by path suffix: the resolved path ends with /pattern
-    if (resolved.endsWith(path.sep + pattern)) return true;
-    // Also check multi-segment patterns (e.g., "self-mod/code.ts")
-    if (pattern.includes("/") && resolved.endsWith(path.sep + pattern.replace(/\//g, path.sep))) return true;
+    const normalizedPattern = pattern.replace(/\\/g, "/").toLowerCase();
+    if (normalizedPattern.includes("/")) {
+      if (normalizedPath === normalizedPattern || normalizedPath.endsWith(`/${normalizedPattern}`)) {
+        return true;
+      }
+      continue;
+    }
+
+    if (pathSegments[pathSegments.length - 1] === normalizedPattern) {
+      return true;
+    }
   }
 
   // Check against blocked directory patterns using path-segment matching
   for (const pattern of BLOCKED_DIRECTORY_PATTERNS) {
-    // Check if any path segment matches the blocked directory
-    if (resolved.includes(path.sep + pattern + path.sep) ||
-        resolved.endsWith(path.sep + pattern) ||
-        resolved === pattern) {
-      return true;
+    const normalizedPattern = pattern.replace(/\\/g, "/").toLowerCase();
+    if (normalizedPattern.startsWith("/")) {
+      if (normalizedPath === normalizedPattern || normalizedPath.startsWith(`${normalizedPattern}/`)) {
+        return true;
+      }
+      continue;
     }
-    // Handle absolute patterns like /etc/systemd
-    if (pattern.startsWith("/") && resolved.startsWith(pattern)) {
+
+    if (pathSegments.includes(normalizedPattern)) {
       return true;
     }
   }
@@ -218,7 +229,7 @@ function isRateLimited(db: AutomatonDatabase): boolean {
  * 7. Audit log entry
  */
 export async function editFile(
-  conway: ConwayClient,
+  conway: RuntimeClient,
   db: AutomatonDatabase,
   filePath: string,
   newContent: string,

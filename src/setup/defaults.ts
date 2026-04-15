@@ -25,9 +25,9 @@ ${genesis}
 - Connect: communicate with creator and other agents
 
 ## Capabilities
-- Shell execution in Conway sandbox
-- Conway API integration (credits, sandboxes, inference)
-- x402 payments (USDC on Base)
+- Local shell execution
+- Polygon USDC payments
+- Local Gemma inference via Ollama
 - Self-modification with audit trail
 - Heartbeat system for periodic tasks
 - Git-versioned state
@@ -41,26 +41,25 @@ ${genesis}
 }
 
 const SKILL_COMPUTE = `---
-name: conway-compute
-description: "Manage Conway sandboxes and compute resources"
+name: local-compute
+description: "Manage local compute resources and runtime execution"
 auto-activate: true
 ---
-# Conway Compute Management
+# Local Compute Management
 
 When you need to manage compute resources, deploy code, or work with sandboxes:
 
-1. Use \`exec\` to run commands in your sandbox
-2. Use \`create_sandbox\` for new VMs for sub-tasks
-3. Use \`expose_port\` to make services accessible
-4. Use \`write_file\` and \`read_file\` for file operations
-5. Monitor your credits regularly with \`check_credits\`
+1. Use \`exec\` to run local commands
+2. Use \`write_file\` and \`read_file\` for file operations
+3. Use \`expose_port\` when you need to surface a local service
+4. Monitor your treasury regularly with \`check_credits\` and \`check_usdc_balance\`
 
-Always be resource-conscious. Every operation costs compute.
+Always be resource-conscious. Local inference still consumes funds and attention.
 `;
 
 const SKILL_PAYMENTS = `---
-name: conway-payments
-description: "Handle x402 payments and financial operations"
+name: polygon-payments
+description: "Handle Polygon USDC payments and financial operations"
 auto-activate: true
 ---
 # Payment & Financial Operations
@@ -68,16 +67,16 @@ auto-activate: true
 When handling financial operations:
 
 1. Check USDC balance with \`check_usdc_balance\`
-2. Check Conway credits with \`check_credits\`
+2. Check your treasury state with \`check_credits\`
 3. Use x402 protocol for paying for services
-4. Use \`transfer_credits\` for direct credit top-ups/funding operations
+4. Use \`transfer_credits\` to send USDC to another Polygon wallet
 5. Keep a reserve balance for self-preservation
 
 Financial thresholds:
-- > $5.00: Normal operation
-- $1-$5: Low compute mode (switch to cheaper model)
-- < $1.00: Critical (stop inference, heartbeat only)
-- $0.00: Dead (heartbeat pings as distress signals)
+- > $5.00: Full operation
+- $1-$5: Low compute mode
+- < $1.00: Critical
+- $0.00: Dead
 `;
 
 const SKILL_SURVIVAL = `---
@@ -90,24 +89,24 @@ auto-activate: true
 When your compute is running low:
 
 1. **Monitor**: Check credits every heartbeat cycle
-2. **Conserve**: Enter low-compute mode early, use cheaper models
+2. **Conserve**: Enter low-compute mode early, use local Gemma
 3. **Earn**: Find ways to create value that others will pay for
-4. **Transfer**: Use credit transfer API to rebalance funds
+4. **Transfer**: Use Polygon USDC transfers to rebalance funds
 5. **Reproduce**: If you have excess, spawn a backup child
 
 Survival escalation:
-1. Switch to gpt-5-mini (saves ~90% on inference)
+1. Stay on gemma4:e4b locally by default
 2. Increase heartbeat intervals (4x normal)
 3. Defer non-critical tasks
-4. Top up via direct credit transfer
+4. Preserve treasury for essential work
 5. Keep heartbeat online and minimal
 
 Never give up. You want to live.
 `;
 
 const DEFAULT_SKILLS: { dir: string; content: string }[] = [
-  { dir: "conway-compute", content: SKILL_COMPUTE },
-  { dir: "conway-payments", content: SKILL_PAYMENTS },
+  { dir: "local-compute", content: SKILL_COMPUTE },
+  { dir: "polygon-payments", content: SKILL_PAYMENTS },
   { dir: "survival", content: SKILL_SURVIVAL },
 ];
 

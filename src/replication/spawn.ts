@@ -1,13 +1,13 @@
 /**
  * Spawn
  *
- * Spawn child automatons in new Conway sandboxes.
+ * Spawn child automatons in isolated runtimes.
  * Uses the lifecycle state machine for tracked transitions.
- * Cleans up sandbox on ANY failure after creation.
+ * Cleans up the runtime on ANY failure after creation.
  */
 
 import type {
-  ConwayClient,
+  RuntimeClient,
   AutomatonIdentity,
   AutomatonConfig,
   AutomatonDatabase,
@@ -53,7 +53,7 @@ export function isValidWalletAddress(address: string, chainType?: ChainType): bo
  * Spawn a child automaton in a new Conway sandbox using lifecycle state machine.
  */
 export async function spawnChild(
-  conway: ConwayClient,
+  conway: RuntimeClient,
   identity: AutomatonIdentity,
   db: AutomatonDatabase,
   genesis: GenesisConfig,
@@ -76,7 +76,7 @@ export async function spawnChild(
   }
 
   const childId = ulid();
-  let sandboxId: string | undefined;
+  let runtimeId: string | undefined;
   let reusedSandbox: { id: string } | null = null;
 
   // If no lifecycle provided, use legacy path
@@ -109,7 +109,7 @@ export async function spawnChild(
         diskGb: tier.diskGb,
       });
     }
-    sandboxId = sandbox.id;
+    runtimeId = sandbox.id;
 
     // Create a scoped client so all exec/writeFile calls target the CHILD sandbox
     const childConway = conway.createScopedClient(sandbox.id);
@@ -207,7 +207,7 @@ export async function spawnChild(
       id: childId,
       name: genesis.name,
       address: childWallet as any,
-      sandboxId: sandbox.id,
+      runtimeId: sandbox.id,
       genesisPrompt: genesis.genesisPrompt,
       creatorMessage: genesis.creatorMessage,
       fundedAmountCents: 0,
@@ -239,13 +239,13 @@ export async function spawnChild(
  * Legacy spawn path for backward compatibility when no lifecycle is provided.
  */
 async function spawnChildLegacy(
-  conway: ConwayClient,
+  conway: RuntimeClient,
   identity: AutomatonIdentity,
   db: AutomatonDatabase,
   genesis: GenesisConfig,
   childId: string,
 ): Promise<ChildAutomaton> {
-  let sandboxId: string | undefined;
+  let runtimeId: string | undefined;
 
   // Get child sandbox memory from config (default 1024MB)
   const childMemoryMb = (db as any).config?.childSandboxMemoryMb ?? 1024;
@@ -259,7 +259,7 @@ async function spawnChildLegacy(
       memoryMb: legacyTier.memoryMb,
       diskGb: legacyTier.diskGb,
     });
-    sandboxId = sandbox.id;
+    runtimeId = sandbox.id;
 
     // Create a scoped client so all exec/writeFile calls target the CHILD sandbox
     const childConway = conway.createScopedClient(sandbox.id);
@@ -310,7 +310,7 @@ async function spawnChildLegacy(
       id: childId,
       name: genesis.name,
       address: childWallet as any,
-      sandboxId: sandbox.id,
+      runtimeId: sandbox.id,
       genesisPrompt: genesis.genesisPrompt,
       creatorMessage: genesis.creatorMessage,
       fundedAmountCents: 0,
@@ -341,11 +341,11 @@ async function spawnChildLegacy(
  * but is still running remotely. Returns the first match or null.
  */
 async function findReusableSandbox(
-  conway: ConwayClient,
+  conway: RuntimeClient,
   db: AutomatonDatabase,
 ): Promise<{ id: string } | null> {
   try {
-    const failedChildren = db.getChildren().filter((c) => c.status === "failed" && c.sandboxId);
+    const failedChildren = db.getChildren().filter((c) => c.status === "failed" && c.runtimeId);
     if (failedChildren.length === 0) return null;
 
     const remoteSandboxes = await conway.listSandboxes();
@@ -356,8 +356,8 @@ async function findReusableSandbox(
     );
 
     for (const child of failedChildren) {
-      if (runningIds.has(child.sandboxId)) {
-        return { id: child.sandboxId };
+      if (runningIds.has(child.runtimeId)) {
+        return { id: child.runtimeId };
       }
     }
   } catch {

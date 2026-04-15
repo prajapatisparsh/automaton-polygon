@@ -10,4 +10,10 @@ dist
 *.tgz
 .automaton/wallet.json
 .automaton/state.db
+docs/
+.gitnexus
+AGENTS.md
+CLAUDE.md
+_bmad/
+.claude/
 

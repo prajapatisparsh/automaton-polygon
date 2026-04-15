@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { BUILTIN_TASKS } from "../heartbeat/tasks.js";
 import {
-  MockConwayClient,
+  MockRuntimeClient,
   MockSocialClient,
   createTestDb,
   createTestIdentity,
@@ -36,11 +36,11 @@ function createMockTickContext(db: AutomatonDatabase, overrides?: Partial<TickCo
 
 describe("Heartbeat Tasks", () => {
   let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     db = createTestDb();
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
   });
 
   afterEach(() => {
@@ -363,7 +363,7 @@ describe("Heartbeat Tasks", () => {
       expect(result.shouldWake).toBe(false);
     });
 
-    it("wakes when has USDC but critically low credits", async () => {
+    it("records treasury state without waking when USDC is available", async () => {
       const tickCtx = createMockTickContext(db, {
         creditBalance: 0, // critical tier
         usdcBalance: 10.0, // > 5
@@ -378,8 +378,10 @@ describe("Heartbeat Tasks", () => {
 
       const result = await BUILTIN_TASKS.check_usdc_balance(tickCtx, taskCtx);
 
-      expect(result.shouldWake).toBe(true);
-      expect(result.message).toContain("USDC");
+      expect(result.shouldWake).toBe(false);
+      const usdcCheck = JSON.parse(db.getKV("last_usdc_check")!);
+      expect(usdcCheck.balance).toBe(10);
+      expect(usdcCheck.credits).toBe(0);
     });
 
     it("does not wake when USDC below threshold", async () => {

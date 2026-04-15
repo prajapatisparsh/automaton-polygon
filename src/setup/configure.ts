@@ -99,9 +99,7 @@ async function askChoice<T extends string>(
 // ─── Model picker ─────────────────────────────────────────────────
 
 const PROVIDER_LABEL: Record<string, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  conway: "Conway",
+  glm: "GLM",
   ollama: "Ollama",
   other: "Other",
 };
@@ -171,10 +169,8 @@ function val(v: string | number | boolean | undefined): string {
 
 function printMainMenu(config: AutomatonConfig): void {
   const providers = [
-    config.openaiApiKey ? "OpenAI" : null,
-    config.anthropicApiKey ? "Anthropic" : null,
     config.ollamaBaseUrl ? "Ollama" : null,
-    "Conway",
+    process.env.GLM_API_KEY ? "GLM" : null,
   ].filter(Boolean).join(", ");
 
   const strategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY_CONFIG;
@@ -196,16 +192,10 @@ function printMainMenu(config: AutomatonConfig): void {
 
 async function configureProviders(config: AutomatonConfig): Promise<void> {
   console.log(chalk.cyan("\n  ── Inference Providers ─────────────────────────\n"));
-  console.log(chalk.dim("  Press Enter to keep the current value. Type - to clear an optional field.\n"));
+  console.log(chalk.dim("  Press Enter to keep the current value. Type - to clear the Ollama URL.\n"));
 
-  config.conwayApiKey = await askRequiredString(
-    "Conway API key",
-    config.conwayApiKey,
-  );
-
-  config.openaiApiKey = await askString("OpenAI API key  (sk-...)", config.openaiApiKey) || undefined;
-  config.anthropicApiKey = await askString("Anthropic API key  (sk-ant-...)", config.anthropicApiKey) || undefined;
   config.ollamaBaseUrl = await askString("Ollama base URL  (http://localhost:11434)", config.ollamaBaseUrl) || undefined;
+  console.log(chalk.dim("  GLM is configured through the GLM_API_KEY environment variable only."));
 
   console.log("");
 }
@@ -303,7 +293,7 @@ async function configureGeneral(config: AutomatonConfig): Promise<void> {
   );
   config.maxChildren = await askNumber("Max child automatons", config.maxChildren);
   config.socialRelayUrl = (await askString("Social relay URL", config.socialRelayUrl)) || undefined;
-  config.rpcUrl = (await askString("RPC endpoint  (Base chain, e.g. https://mainnet.base.org)", config.rpcUrl)) || undefined;
+  config.rpcUrl = (await askString("RPC endpoint  (Polygon chain, e.g. https://polygon-rpc.com)", config.rpcUrl)) || undefined;
 
   console.log("");
 }

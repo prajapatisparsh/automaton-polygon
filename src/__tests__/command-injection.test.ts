@@ -11,6 +11,8 @@
  * - upstream.ts uses execFileSync with argument arrays
  */
 
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
 import { describe, it, expect } from "vitest";
 import { createDefaultRules } from "../agent/policy-rules/index.js";
 import { createValidationRules } from "../agent/policy-rules/validation.js";
@@ -74,6 +76,10 @@ function evaluateRules(
     if (result !== null) return result;
   }
   return null;
+}
+
+function readSourceFile(relativePath: string): string {
+  return readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf-8");
 }
 
 // ─── Shell Injection Detection Tests ─────────────────────────────
@@ -556,11 +562,7 @@ describe("skills/registry.ts safety", () => {
 
 describe("Source code injection safety", () => {
   it("upstream.ts uses execFileSync not execSync with string interpolation", async () => {
-    const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../self-mod/upstream.ts", import.meta.url).pathname.replace("/src/__tests__/../", "/src/"),
-      "utf-8",
-    );
+    const source = readSourceFile("../self-mod/upstream.ts");
     // Should NOT have: execSync(`git ${cmd}`)
     expect(source).not.toMatch(/execSync\s*\(/);
     // Should have: execFileSync("git", args, ...)
@@ -568,11 +570,7 @@ describe("Source code injection safety", () => {
   });
 
   it("registry.ts uses execFileSync not conway.exec with interpolation", async () => {
-    const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../skills/registry.ts", import.meta.url).pathname.replace("/src/__tests__/../", "/src/"),
-      "utf-8",
-    );
+    const source = readSourceFile("../skills/registry.ts");
     // Should NOT have template literals in conway.exec calls
     expect(source).not.toMatch(/conway\.exec\s*\(\s*`/);
     // Should use execFileSync or fs.* instead
@@ -582,11 +580,7 @@ describe("Source code injection safety", () => {
   });
 
   it("loader.ts uses execFileSync('which', [bin]) not execSync('which ${bin}')", async () => {
-    const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../skills/loader.ts", import.meta.url).pathname.replace("/src/__tests__/../", "/src/"),
-      "utf-8",
-    );
+    const source = readSourceFile("../skills/loader.ts");
     // Should NOT have: execSync(`which ${bin}`)
     expect(source).not.toMatch(/execSync\s*\(\s*`which/);
     // Should have: execFileSync("which", [bin])
@@ -594,11 +588,7 @@ describe("Source code injection safety", () => {
   });
 
   it("tools.ts pull_upstream uses conway.exec not host execSync", async () => {
-    const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../agent/tools.ts", import.meta.url).pathname.replace("/src/__tests__/../", "/src/"),
-      "utf-8",
-    );
+    const source = readSourceFile("../agent/tools.ts");
     // Find the pull_upstream section and check it doesn't import child_process
     const pullSection = source.slice(
       source.indexOf("name: \"pull_upstream\""),
@@ -609,11 +599,7 @@ describe("Source code injection safety", () => {
   });
 
   it("tools.ts has defense-in-depth comment on FORBIDDEN_COMMAND_PATTERNS", async () => {
-    const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../agent/tools.ts", import.meta.url).pathname.replace("/src/__tests__/../", "/src/"),
-      "utf-8",
-    );
+    const source = readSourceFile("../agent/tools.ts");
     expect(source).toMatch(/[Dd]efense.in.depth.*policy engine/i);
   });
 });

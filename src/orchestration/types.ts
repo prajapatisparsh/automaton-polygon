@@ -2,7 +2,7 @@ export interface AgentTracker {
   getIdle(): { address: string; name: string; role: string; status: string }[];
   getBestForTask(role: string): { address: string; name: string } | null;
   updateStatus(address: string, status: string): void;
-  register(agent: { address: string; name: string; role: string; sandboxId: string }): void;
+  register(agent: { address: string; name: string; role: string; runtimeId: string }): void;
 }
 
 export interface FundingProtocol {

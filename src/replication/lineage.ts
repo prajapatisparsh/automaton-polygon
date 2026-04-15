@@ -13,7 +13,7 @@ import type {
   AutomatonDatabase,
   ChildAutomaton,
   AutomatonConfig,
-  ConwayClient,
+  RuntimeClient,
 } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
 import type { ChildHealthMonitor } from "./health.js";
@@ -72,7 +72,7 @@ export function getLineageSummary(
     );
     for (const child of lineage.children) {
       parts.push(
-        `  - ${child.name} [${child.status}] sandbox:${child.sandboxId}`,
+        `  - ${child.name} [${child.status}] sandbox:${child.runtimeId}`,
       );
     }
   }
@@ -133,7 +133,7 @@ export async function pruneDeadChildren(
  * Concurrency limited to 3 simultaneous checks.
  */
 export async function refreshChildrenStatus(
-  conway: ConwayClient,
+  conway: RuntimeClient,
   db: AutomatonDatabase,
   healthMonitor?: ChildHealthMonitor,
 ): Promise<void> {

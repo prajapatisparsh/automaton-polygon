@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { runAgentLoop } from "../agent/loop.js";
 import {
   MockInferenceClient,
-  MockConwayClient,
+  MockRuntimeClient,
   MockSocialClient,
   createTestDb,
   createTestIdentity,
@@ -20,13 +20,13 @@ import type { AutomatonDatabase, AgentTurn, AgentState } from "../types.js";
 
 describe("Agent Loop", () => {
   let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
   let identity: ReturnType<typeof createTestIdentity>;
   let config: ReturnType<typeof createTestConfig>;
 
   beforeEach(() => {
     db = createTestDb();
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
     identity = createTestIdentity();
     config = createTestConfig();
   });
@@ -281,6 +281,37 @@ describe("Agent Loop", () => {
     consoleSpy2.mockRestore();
   });
 
+  it("api-unreachable fallback still routes a low-compute inference turn", async () => {
+    conway.getCreditsBalance = async () => {
+      throw new Error("API down");
+    };
+
+    const inference = new MockInferenceClient([
+      noToolResponse("Still operating despite RPC outage."),
+    ]);
+
+    const turns: AgentTurn[] = [];
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleSpy2 = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+      onTurnComplete: (turn) => turns.push(turn),
+    });
+
+    expect(inference.lowComputeMode).toBe(true);
+    expect(inference.calls.length).toBeGreaterThan(0);
+    expect(turns.some((turn) => turn.thinking.includes("Still operating despite RPC outage."))).toBe(true);
+    expect(db.getAgentState()).not.toBe("dead");
+
+    consoleSpy.mockRestore();
+    consoleSpy2.mockRestore();
+  });
+
   it("turn persistence is atomic with inbox ack", async () => {
     // Insert an inbox message
     db.insertInboxMessage({
@@ -416,11 +447,11 @@ describe("Agent Loop", () => {
     expect(db.getAgentState()).toBe("sleeping");
   });
 
-  it("zero credits enters critical tier, not dead", async () => {
-    conway.creditsCents = 0; // $0 -> critical tier (agent stays alive)
+  it("zero credits enters dead tier", async () => {
+    conway.creditsCents = 0; // $0 -> dead tier
 
     const inference = new MockInferenceClient([
-      noToolResponse("I have no credits but I'm still alive."),
+      noToolResponse("Treasury is exhausted."),
     ]);
 
     const stateChanges: AgentState[] = [];
@@ -434,10 +465,8 @@ describe("Agent Loop", () => {
       onStateChange: (state) => stateChanges.push(state),
     });
 
-    // Zero credits = critical, not dead. Agent should stay alive.
-    expect(stateChanges).toContain("critical");
-    expect(stateChanges).not.toContain("dead");
-    expect(db.getAgentState()).not.toBe("dead");
+    expect(stateChanges).toContain("dead");
+    expect(db.getAgentState()).toBe("dead");
   });
 
   it("maintenance loop detected after 3 consecutive idle-only turns", async () => {

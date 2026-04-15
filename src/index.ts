@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Conway Automaton Runtime
+ * Automaton Runtime
  *
  * The entry point for the sovereign AI agent.
  * Handles CLI args, bootstrapping, and orchestrating
@@ -10,11 +10,9 @@
 import fs from "fs";
 import path from "path";
 import { getWallet, getAutomatonDir } from "./identity/wallet.js";
-import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
 import { loadConfig, resolvePath } from "./config.js";
 import { createDatabase } from "./state/database.js";
-import { createConwayClient } from "./conway/client.js";
-import { createInferenceClient } from "./conway/inference.js";
+import { createInferenceClient } from "./inference/client.js";
 import { createHeartbeatDaemon } from "./heartbeat/daemon.js";
 import {
   loadHeartbeatConfig,
@@ -33,7 +31,7 @@ import type { AutomatonIdentity, AgentState, Skill, SocialClientInterface } from
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel, StructuredLogger } from "./observability/logger.js";
 import { prettySink } from "./observability/pretty-sink.js";
-import { bootstrapTopup } from "./conway/topup.js";
+import { createLocalRuntimeClient } from "./payments/runtime-client.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
 
@@ -46,13 +44,13 @@ async function main(): Promise<void> {
   // ─── CLI Commands ────────────────────────────────────────────
 
   if (args.includes("--version") || args.includes("-v")) {
-    logger.info(`Conway Automaton v${VERSION}`);
+    logger.info(`Automaton v${VERSION}`);
     process.exit(0);
   }
 
   if (args.includes("--help") || args.includes("-h")) {
     logger.info(`
-Conway Automaton v${VERSION}
+Automaton v${VERSION}
 Sovereign AI Agent Runtime
 
 Usage:
@@ -61,15 +59,14 @@ Usage:
   automaton --configure    Edit configuration (providers, model, treasury, general)
   automaton --pick-model   Interactively pick the active inference model
   automaton --init         Initialize wallet and config directory
-  automaton --provision    Provision Conway API key via SIWE
   automaton --status       Show current automaton status
   automaton --version      Show version
   automaton --help         Show this help
 
 Environment:
-  CONWAY_API_URL           Conway API URL (default: https://api.conway.tech)
-  CONWAY_API_KEY           Conway API key (overrides config)
   OLLAMA_BASE_URL          Ollama base URL (overrides config, e.g. http://localhost:11434)
+  GLM_API_KEY              Optional GLM 5.1 API key for FULL-tier inference
+  POLYGON_RPC_URL          Polygon RPC URL (overrides config)
 `);
     process.exit(0);
   }
@@ -92,17 +89,6 @@ Environment:
         configDir: getAutomatonDir(),
       }),
     );
-    process.exit(0);
-  }
-
-  if (args.includes("--provision")) {
-    try {
-      const result = await provision();
-      logger.info(JSON.stringify(result));
-    } catch (err: any) {
-      logger.error(`Provision failed: ${err.message}`);
-      process.exit(1);
-    }
     process.exit(0);
   }
 
@@ -165,7 +151,7 @@ async function showStatus(): Promise<void> {
 Name:       ${config.name}
 Address:    ${config.walletAddress}
 Creator:    ${config.creatorAddress}
-Sandbox:    ${config.sandboxId}
+Runtime:    ${config.runtimeId}
 State:      ${state}
 Turns:      ${turnCount}
 Tools:      ${tools.length} installed
@@ -184,7 +170,7 @@ Version:    ${config.version}
 // ─── Main Run ──────────────────────────────────────────────────
 
 async function run(): Promise<void> {
-  logger.info(`[${new Date().toISOString()}] Conway Automaton v${VERSION} starting...`);
+  logger.info(`[${new Date().toISOString()}] Automaton v${VERSION} starting...`);
 
   // Load config — first run triggers interactive setup wizard
   let config = loadConfig();
@@ -196,11 +182,7 @@ async function run(): Promise<void> {
   // Load wallet (chain-aware)
   const { account, chainIdentity, chainType: walletChainType } = await getWallet();
   const resolvedChainType = config.chainType || walletChainType || "evm";
-  const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
-  if (!apiKey) {
-    logger.error("No API key found. Run: automaton --provision");
-    process.exit(1);
-  }
+  const apiKey = process.env.GLM_API_KEY || config.conwayApiKey || "local-runtime";
 
   // Initialize database
   const dbPath = resolvePath(config.dbPath);
@@ -219,7 +201,7 @@ async function run(): Promise<void> {
     address: chainIdentity.address,
     account,
     creatorAddress: config.creatorAddress,
-    sandboxId: config.sandboxId,
+    runtimeId: config.runtimeId,
     apiKey,
     createdAt,
     chainType: resolvedChainType,
@@ -231,19 +213,14 @@ async function run(): Promise<void> {
   db.setIdentity("address", chainIdentity.address);
   db.setIdentity("creator", config.creatorAddress);
   db.setIdentity("chainType", resolvedChainType);
-  db.setIdentity("sandbox", config.sandboxId);
+  db.setIdentity("sandbox", config.runtimeId);
   const storedAutomatonId = db.getIdentity("automatonId");
-  const automatonId = storedAutomatonId || config.sandboxId || randomUUID();
+  const automatonId = storedAutomatonId || config.runtimeId || randomUUID();
   if (!storedAutomatonId) {
     db.setIdentity("automatonId", automatonId);
   }
 
-  // Create Conway client
-  const conway = createConwayClient({
-    apiUrl: config.conwayApiUrl,
-    apiKey,
-    sandboxId: config.sandboxId,
-  });
+  const conway = createLocalRuntimeClient({ runtimeId: config.runtimeId });
 
   // Register automaton identity (one-time, immutable)
   const registrationState = db.getIdentity("conwayRegistrationStatus");
@@ -285,13 +262,9 @@ async function run(): Promise<void> {
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
   const inference = createInferenceClient({
-    apiUrl: config.conwayApiUrl,
-    apiKey,
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,
-    lowComputeModel: config.modelStrategy?.lowComputeModel || "gpt-5-mini",
-    openaiApiKey: config.openaiApiKey,
-    anthropicApiKey: config.anthropicApiKey,
+    lowComputeModel: config.modelStrategy?.lowComputeModel || "gemma4:e4b",
     ollamaBaseUrl,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
@@ -334,38 +307,6 @@ async function run(): Promise<void> {
     logger.info(`[${new Date().toISOString()}] State repo initialized.`);
   } catch (err: any) {
     logger.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
-  }
-
-  // Bootstrap topup: buy minimum credits ($5) from USDC so the agent can start.
-  // The agent decides larger topups itself via the topup_credits tool.
-  try {
-    let bootstrapTimer: ReturnType<typeof setTimeout>;
-    const bootstrapTimeout = new Promise<null>((_, reject) => {
-      bootstrapTimer = setTimeout(() => reject(new Error("bootstrap topup timed out")), 15_000);
-    });
-    try {
-      await Promise.race([
-        (async () => {
-          const creditsCents = await conway.getCreditsBalance().catch(() => 0);
-          const topupResult = await bootstrapTopup({
-            apiUrl: config.conwayApiUrl,
-            account,
-            creditsCents,
-            chainType: resolvedChainType,
-          });
-          if (topupResult?.success) {
-            logger.info(
-              `[${new Date().toISOString()}] Bootstrap topup: +$${topupResult.amountUsd} credits from USDC`,
-            );
-          }
-        })(),
-        bootstrapTimeout,
-      ]);
-    } finally {
-      clearTimeout(bootstrapTimer!);
-    }
-  } catch (err: any) {
-    logger.warn(`[${new Date().toISOString()}] Bootstrap topup skipped: ${err.message}`);
   }
 
   // Start heartbeat daemon (Phase 1.1: DurableScheduler)

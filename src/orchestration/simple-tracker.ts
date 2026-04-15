@@ -3,7 +3,7 @@ import type {
   AutomatonDatabase,
   AutomatonIdentity,
   ChildStatus,
-  ConwayClient,
+  RuntimeClient,
 } from "../types.js";
 import type { AgentTracker, FundingProtocol } from "./types.js";
 
@@ -63,12 +63,12 @@ export class SimpleAgentTracker implements AgentTracker {
     this.db.updateChildStatus(child.id, status as ChildStatus);
   }
 
-  register(agent: { address: string; name: string; role: string; sandboxId: string }): void {
+  register(agent: { address: string; name: string; role: string; runtimeId: string }): void {
     this.db.insertChild({
       id: ulid(),
       name: agent.name,
       address: agent.address as `0x${string}`,
-      sandboxId: agent.sandboxId,
+      runtimeId: agent.runtimeId,
       genesisPrompt: `Role: ${agent.role}`,
       creatorMessage: "registered by orchestrator",
       fundedAmountCents: 0,
@@ -80,7 +80,7 @@ export class SimpleAgentTracker implements AgentTracker {
 
 export class SimpleFundingProtocol implements FundingProtocol {
   constructor(
-    private readonly conway: ConwayClient,
+    private readonly conway: RuntimeClient,
     private readonly identity: AutomatonIdentity,
     private readonly db: AutomatonDatabase,
   ) {}

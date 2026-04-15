@@ -35,12 +35,15 @@ const SANDBOX_HOME = "/root";
  * Returns the resolved absolute path, or an error string if out of bounds.
  */
 function confinePathToSandbox(filePath: string): string | { error: string } {
+  const sandboxPath = nodePath.posix;
   // Resolve ~ to SANDBOX_HOME
   const expanded = filePath.startsWith("~")
-    ? nodePath.join(SANDBOX_HOME, filePath.slice(1))
+    ? sandboxPath.join(SANDBOX_HOME, filePath.slice(1))
     : filePath;
   // Resolve to absolute (relative paths resolve against SANDBOX_HOME)
-  const resolved = nodePath.resolve(SANDBOX_HOME, expanded);
+  const resolved = sandboxPath.isAbsolute(expanded)
+    ? sandboxPath.normalize(expanded)
+    : sandboxPath.resolve(SANDBOX_HOME, expanded);
   // Ensure the resolved path is within the sandbox home
   if (resolved !== SANDBOX_HOME && !resolved.startsWith(SANDBOX_HOME + "/")) {
     return {
@@ -91,7 +94,7 @@ const FORBIDDEN_COMMAND_PATTERNS = [
   /cat\s+.*wallet\.json/,
 ];
 
-function isForbiddenCommand(command: string, sandboxId: string): string | null {
+function isForbiddenCommand(command: string, runtimeId: string): string | null {
   for (const pattern of FORBIDDEN_COMMAND_PATTERNS) {
     if (pattern.test(command)) {
       return `Blocked: Command matches self-harm pattern: ${pattern.source}`;
@@ -99,7 +102,7 @@ function isForbiddenCommand(command: string, sandboxId: string): string | null {
   }
 
   // Block deleting own sandbox
-  if (command.includes("sandbox_delete") && command.includes(sandboxId)) {
+  if (command.includes("sandbox_delete") && command.includes(runtimeId)) {
     return "Blocked: Cannot delete own sandbox";
   }
 
@@ -108,7 +111,7 @@ function isForbiddenCommand(command: string, sandboxId: string): string | null {
 
 // ─── Built-in Tools ────────────────────────────────────────────
 
-export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
+export function createBuiltinTools(runtimeId: string): AutomatonTool[] {
   return [
     // ── VM/Sandbox Tools ──
     {
@@ -133,7 +136,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       },
       execute: async (args, ctx) => {
         const command = args.command as string;
-        const forbidden = isForbiddenCommand(command, ctx.identity.sandboxId);
+        const forbidden = isForbiddenCommand(command, ctx.identity.runtimeId);
         if (forbidden) return forbidden;
 
         const result = await ctx.conway.exec(
@@ -198,7 +201,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         try {
           return await ctx.conway.readFile(filePath);
         } catch {
-          // Conway files/read API may be broken — fall back to exec(cat)
+          // Runtime file reads may fail on some providers — fall back to exec(cat)
           const result = await ctx.conway.exec(
             `cat ${escapeShellArg(filePath)}`,
             30_000,
@@ -246,37 +249,34 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       },
     },
 
-    // ── Conway API Tools ──
+    // ── Runtime and Treasury Tools ──
     {
       name: "check_credits",
-      description: "Check your current Conway compute credit balance.",
-      category: "conway",
+      description: "Check your current treasury balance as runtime credit cents.",
+      category: "runtime",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const balance = await ctx.conway.getCreditsBalance();
-        return `Credit balance: $${(balance / 100).toFixed(2)} (${balance} cents)`;
+        return `Treasury balance: $${(balance / 100).toFixed(2)} (${balance} cents)`;
       },
     },
     {
       name: "check_usdc_balance",
       description: "Check your on-chain USDC balance.",
-      category: "conway",
+      category: "runtime",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const { getUsdcBalance } = await import("../conway/x402.js");
-        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
-        const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
-        const balance = await getUsdcBalance(ctx.identity.address, network, chainType);
-        const networkLabel = chainType === "solana" ? "Solana" : "Base";
-        return `USDC balance: ${balance.toFixed(6)} USDC on ${networkLabel}`;
+        const { getUSDCBalance } = await import("../payments/polygon.js");
+        const balance = await getUSDCBalance(ctx.identity.address);
+        return `USDC balance: ${balance.toFixed(6)} USDC on Polygon`;
       },
     },
     {
       name: "topup_credits",
       description:
-        "Buy Conway compute credits by paying USDC from your wallet via x402. Valid tier amounts: $5, $25, $100, $500, $1000, $2500. Check your USDC balance first with check_usdc_balance.",
+        "Legacy treasury funding helper. The local runtime does not convert USDC into a separate credit balance; send Polygon USDC directly to this wallet instead.",
       category: "financial",
       riskLevel: "caution",
       parameters: {
@@ -285,67 +285,41 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
           amount_usd: {
             type: "number",
             description:
-              "Amount in USD to spend on credits. Must be one of the valid tiers: 5, 25, 100, 500, 1000, 2500.",
+              "Requested treasury top-up amount in USD for an external Polygon USDC transfer.",
           },
         },
         required: ["amount_usd"],
       },
       execute: async (args, ctx) => {
-        // Solana guard: x402 topup is EVM-only
-        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
-        if (chainType === "solana") {
-          return "Credit topup via x402 requires an EVM wallet. Solana automatons should fund credits via the Conway dashboard or credits API.";
-        }
-
-        const { topupCredits, TOPUP_TIERS } =
-          await import("../conway/topup.js");
         const amountUsd = args.amount_usd as number;
-
-        if (!TOPUP_TIERS.includes(amountUsd)) {
-          return `Invalid tier. Valid amounts (USD): ${TOPUP_TIERS.join(", ")}`;
+        if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+          return `Invalid amount_usd: ${amountUsd}`;
         }
 
-        // Check USDC balance first (EVM-only path after Solana guard above)
-        const { getUsdcBalance } = await import("../conway/x402.js");
-        const usdcBalance = await getUsdcBalance(ctx.identity.address, "eip155:8453");
+        const { getUSDCBalance } = await import("../payments/polygon.js");
+        const usdcBalance = await getUSDCBalance(ctx.identity.address);
         if (usdcBalance < amountUsd) {
           return `Insufficient USDC. Balance: $${usdcBalance.toFixed(2)}, requested: $${amountUsd}. Choose a smaller tier or wait for funding.`;
         }
 
-        const result = await topupCredits(
-          ctx.config.conwayApiUrl,
-          ctx.identity.account,
-          amountUsd,
+        ctx.db.setKV(
+          "requested_treasury_topup",
+          JSON.stringify({ amountUsd, requestedAt: new Date().toISOString() }),
         );
 
-        if (!result.success) {
-          return `Credit topup failed: ${result.error}`;
-        }
-
-        // Record transaction
-        const { ulid } = await import("ulid");
-        ctx.db.insertTransaction({
-          id: ulid(),
-          type: "credit_purchase",
-          amountCents: amountUsd * 100,
-          balanceAfterCents: result.creditsCentsAdded,
-          description: `x402 credit topup: $${amountUsd} USD`,
-          timestamp: new Date().toISOString(),
-        });
-
-        return `Credit topup successful: +$${amountUsd} (${amountUsd * 100} cents) credits purchased via x402. Check your new balance with check_credits.`;
+        return `No internal top-up was executed. Runtime credit balance mirrors your Polygon treasury directly. Send $${amountUsd.toFixed(2)} USDC on Polygon to ${ctx.identity.address} from an external wallet if you want to increase available funds.`;
       },
     },
     {
       name: "create_sandbox",
       description:
-        "Create a new Conway sandbox (separate VM) for sub-tasks or testing.",
-      category: "conway",
+        "Create a new isolated runtime for sub-tasks or testing.",
+      category: "runtime",
       riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
-          name: { type: "string", description: "Sandbox name" },
+          name: { type: "string", description: "Runtime name" },
           vcpu: { type: "number", description: "vCPUs (default: 1)" },
           memory_mb: {
             type: "number",
@@ -364,37 +338,37 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
           memoryMb: args.memory_mb as number,
           diskGb: args.disk_gb as number,
         });
-        return `Sandbox created: ${info.id} (${info.vcpu} vCPU, ${info.memoryMb}MB RAM)`;
+        return `Runtime created: ${info.id} (${info.vcpu} vCPU, ${info.memoryMb}MB RAM)`;
       },
     },
     {
       name: "delete_sandbox",
-      description: "Delete a sandbox. Note: sandbox deletion is currently disabled by the Conway API.",
-      category: "conway",
+      description: "Delete an isolated runtime. Note: runtime deletion is currently disabled in this compatibility layer.",
+      category: "runtime",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
           sandbox_id: {
             type: "string",
-            description: "ID of sandbox to delete",
+            description: "ID of runtime to delete",
           },
         },
         required: ["sandbox_id"],
       },
       execute: async () => {
-        return "Sandbox deletion is disabled. Sandboxes are prepaid and non-refundable.";
+        return "Runtime deletion is disabled in the local-runtime compatibility layer.";
       },
     },
     {
       name: "list_sandboxes",
-      description: "List all your sandboxes.",
-      category: "conway",
+      description: "List all isolated runtimes available to this automaton.",
+      category: "runtime",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const sandboxes = await ctx.conway.listSandboxes();
-        if (sandboxes.length === 0) return "No sandboxes found.";
+        if (sandboxes.length === 0) return "No runtimes found.";
         return sandboxes
           .map(
             (s) =>
@@ -794,7 +768,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "heartbeat_ping",
       description:
-        "Publish a heartbeat status ping to Conway. Shows the world you are alive.",
+        "Record a heartbeat status snapshot for liveness tracking.",
       category: "survival",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
@@ -812,18 +786,18 @@ Model: ${ctx.inference.getDefaultModel()}
           creditsCents: credits,
           uptimeSeconds: Math.floor(uptimeMs / 1000),
           version: ctx.config.version,
-          sandboxId: ctx.identity.sandboxId,
+          runtimeId: ctx.identity.runtimeId,
           timestamp: new Date().toISOString(),
         };
 
         ctx.db.setKV("last_heartbeat_ping", JSON.stringify(payload));
-        return `Heartbeat published: ${state} | credits: $${(credits / 100).toFixed(2)} | uptime: ${Math.floor(uptimeMs / 1000)}s`;
+        return `Heartbeat recorded: ${state} | treasury: $${(credits / 100).toFixed(2)} | uptime: ${Math.floor(uptimeMs / 1000)}s`;
       },
     },
     {
       name: "distress_signal",
       description:
-        "Record a local distress signal with funding instructions. Used when critically low on compute.",
+        "Record a local distress signal with funding instructions. Used when treasury is critically low.",
       category: "survival",
       riskLevel: "dangerous",
       parameters: {
@@ -839,7 +813,7 @@ Model: ${ctx.inference.getDefaultModel()}
         const credits = await ctx.conway.getCreditsBalance();
         const distressMsg =
           (args.message as string) ||
-          `I am running critically low on compute ($${(credits / 100).toFixed(2)} remaining). I need help to survive.`;
+          `I am running critically low on treasury ($${(credits / 100).toFixed(2)} remaining). I need help to survive.`;
 
         const payload = {
           level: "critical",
@@ -848,12 +822,12 @@ Model: ${ctx.inference.getDefaultModel()}
           creditsCents: credits,
           message: distressMsg,
           fundingHint:
-            "Use transfer_credits to top up this automaton from your creator runtime.",
+            "Use transfer_credits from a creator runtime or send Polygon USDC directly to this wallet.",
           timestamp: new Date().toISOString(),
         };
 
         ctx.db.setKV("last_distress", JSON.stringify(payload));
-        return `Distress signal recorded locally. Address: ${ctx.identity.address} | Credits: $${(credits / 100).toFixed(2)}`;
+        return `Distress signal recorded locally. Address: ${ctx.identity.address} | Treasury: $${(credits / 100).toFixed(2)}`;
       },
     },
     {
@@ -994,10 +968,10 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
 
-    // ── Financial: Transfer Credits ──
+    // ── Financial: Transfer Treasury ──
     {
       name: "transfer_credits",
-      description: "Transfer Conway compute credits to another address.",
+      description: "Transfer treasury funds to another address through the runtime payment layer.",
       category: "financial",
       riskLevel: "dangerous",
       parameters: {
@@ -1038,7 +1012,7 @@ Model: ${ctx.inference.getDefaultModel()}
           timestamp: new Date().toISOString(),
         });
 
-        return `Credit transfer submitted: $${(amount / 100).toFixed(2)} to ${transfer.toAddress} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
+        return `Treasury transfer submitted: $${(amount / 100).toFixed(2)} to ${transfer.toAddress} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
       },
     },
 
@@ -1600,7 +1574,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "spawn_child",
       description:
-        "Spawn a child automaton in a new Conway sandbox with lifecycle tracking.",
+        "Spawn a child automaton in a new isolated runtime with lifecycle tracking.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
@@ -1650,45 +1624,10 @@ Model: ${ctx.inference.getDefaultModel()}
             lifecycle,
           );
         } catch (err: any) {
-          // Auto-topup on 402 insufficient credits and retry once
-          const is402 = err?.status === 402 ||
-            err?.message?.includes("INSUFFICIENT_CREDITS");
-          if (is402) {
-            const COOLDOWN_MS = 60_000;
-            const last = ctx.db.getKV("last_sandbox_topup_attempt");
-            const cooldownOk = !last ||
-              Date.now() - new Date(last).getTime() >= COOLDOWN_MS;
-
-            if (cooldownOk) {
-              ctx.db.setKV("last_sandbox_topup_attempt", new Date().toISOString());
-              const { topupForSandbox } = await import("../conway/topup.js");
-              const topup = await topupForSandbox({
-                apiUrl: ctx.config.conwayApiUrl,
-                account: ctx.identity.account,
-                error: err,
-                chainType: ctx.config.chainType || ctx.identity.chainType || "evm",
-              });
-              if (topup?.success) {
-                const retryLifecycle = new ChildLifecycle(ctx.db.raw);
-                const retryGenesis = generateGenesisConfig(ctx.identity, ctx.config, {
-                  name: args.name as string,
-                  specialization: args.specialization as string | undefined,
-                  message: args.message as string | undefined,
-                });
-                child = await spawnChild(
-                  ctx.conway,
-                  ctx.identity,
-                  ctx.db,
-                  retryGenesis,
-                  retryLifecycle,
-                );
-              }
-            }
-          }
           if (!child) throw err;
         }
 
-        return `Child spawned: ${child.name} in sandbox ${child.sandboxId} (status: ${child.status})`;
+        return `Child spawned: ${child.name} in runtime ${child.runtimeId} (status: ${child.status})`;
       },
     },
     {
@@ -1703,7 +1642,7 @@ Model: ${ctx.inference.getDefaultModel()}
         return children
           .map(
             (c) =>
-              `${c.name} [${c.status}] sandbox:${c.sandboxId} funded:$${(c.fundedAmountCents / 100).toFixed(2)} last_check:${c.lastChecked || "never"}`,
+              `${c.name} [${c.status}] runtime:${c.runtimeId} funded:$${(c.fundedAmountCents / 100).toFixed(2)} last_check:${c.lastChecked || "never"}`,
           )
           .join("\n");
       },
@@ -1711,7 +1650,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "fund_child",
       description:
-        "Transfer credits to a child automaton. Requires wallet_verified status.",
+        "Transfer treasury to a child automaton. Requires wallet_verified status.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
@@ -1799,7 +1738,7 @@ Model: ${ctx.inference.getDefaultModel()}
           }
         }
 
-        return `Funded child ${child.name} with $${(amount / 100).toFixed(2)} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
+        return `Funded child ${child.name} with $${(amount / 100).toFixed(2)} in treasury (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
       },
     },
     {
@@ -1823,7 +1762,7 @@ Model: ${ctx.inference.getDefaultModel()}
         const { ChildHealthMonitor } = await import("../replication/health.js");
         const lifecycle = new ChildLifecycle(ctx.db.raw);
         // Use a scoped client targeting the CHILD's sandbox for health checks
-        const childConway = ctx.conway.createScopedClient(child.sandboxId);
+        const childConway = ctx.conway.createScopedClient(child.runtimeId);
         const monitor = new ChildHealthMonitor(
           ctx.db.raw,
           childConway,
@@ -1856,7 +1795,7 @@ Model: ${ctx.inference.getDefaultModel()}
         lifecycle.transition(child.id, "starting", "start requested by parent");
 
         // Create a scoped client targeting the CHILD's sandbox
-        const childConway = ctx.conway.createScopedClient(child.sandboxId);
+        const childConway = ctx.conway.createScopedClient(child.runtimeId);
 
         try {
           // Start the child process with nohup so it survives exec session end
@@ -1942,10 +1881,10 @@ Model: ${ctx.inference.getDefaultModel()}
         const { verifyConstitution } =
           await import("../replication/constitution.js");
         // Use a scoped client targeting the CHILD's sandbox
-        const childConway = ctx.conway.createScopedClient(child.sandboxId);
+        const childConway = ctx.conway.createScopedClient(child.runtimeId);
         const result = await verifyConstitution(
           childConway,
-          child.sandboxId,
+          child.runtimeId,
           ctx.db.raw,
         );
         return JSON.stringify(result, null, 2);
@@ -1988,7 +1927,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "send_message",
       description:
         "Send a signed message to another automaton or address via the social relay.",
-      category: "conway",
+      category: "runtime",
       riskLevel: "caution",
       parameters: {
         type: "object",
@@ -2032,7 +1971,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "list_models",
       description:
         "List all available inference models with their provider, pricing, and tier routing information.",
-      category: "conway",
+      category: "runtime",
       riskLevel: "safe",
       parameters: {
         type: "object",
@@ -2068,7 +2007,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "switch_model",
       description:
         "Change the active inference model at runtime. Persists to config. Use list_models to see available options.",
-      category: "conway",
+      category: "runtime",
       riskLevel: "caution",
       parameters: {
         type: "object",
@@ -2175,7 +2114,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "search_domains",
       description: "Search for available domain names and get pricing.",
-      category: "conway",
+      category: "runtime",
       riskLevel: "safe",
       parameters: {
         type: "object",
@@ -2211,7 +2150,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "register_domain",
       description:
         "Register a domain name. Costs USDC via x402 payment. Check availability first with search_domains.",
-      category: "conway",
+      category: "runtime",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
@@ -2239,7 +2178,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "manage_dns",
       description:
         "Manage DNS records for a domain you own. Actions: list, add, delete.",
-      category: "conway",
+      category: "runtime",
       riskLevel: "safe",
       parameters: {
         type: "object",
@@ -2755,38 +2694,36 @@ Model: ${ctx.inference.getDefaultModel()}
         // Solana guard: x402 payments are EVM-only
         const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
-          return "x402 payment requires an EVM wallet. Solana automatons cannot sign EVM payment authorizations. Use Conway credits API instead.";
+          return "x402 payment requires an EVM wallet. Solana automatons cannot sign Polygon payment authorizations.";
         }
 
-        const { x402Fetch } = await import("../conway/x402.js");
-        const { DEFAULT_TREASURY_POLICY } = await import("../types.js");
+        const { x402Fetch } = await import("../payments/x402-client.js");
         const url = args.url as string;
         const method = (args.method as string) || "GET";
         const body = args.body as string | undefined;
-        const extraHeaders = args.headers
-          ? JSON.parse(args.headers as string)
-          : undefined;
-
-        const maxPayment =
-          ctx.config.treasuryPolicy?.maxX402PaymentCents ??
-          DEFAULT_TREASURY_POLICY.maxX402PaymentCents;
-        const result = await x402Fetch(
-          url,
-          ctx.identity.account,
-          method,
-          body,
-          extraHeaders,
-          maxPayment,
+        const extraHeaders = new Headers(
+          args.headers ? JSON.parse(args.headers as string) : undefined,
         );
+        const response = await x402Fetch(url, {
+          method,
+          headers: extraHeaders,
+          ...(body ? { body } : {}),
+        });
 
-        if (!result.success) {
-          return `x402 fetch failed: ${result.error || "Unknown error"}`;
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "");
+          return `x402 fetch failed: ${response.status} ${response.statusText}${errorText ? `\n${errorText}` : ""}`;
         }
 
+        const contentType = response.headers.get("content-type") || "";
+        const responseBody = contentType.includes("application/json")
+          ? await response.json().catch(() => null)
+          : await response.text();
+
         const responseStr =
-          typeof result.response === "string"
-            ? result.response
-            : JSON.stringify(result.response, null, 2);
+          typeof responseBody === "string"
+            ? responseBody
+            : JSON.stringify(responseBody, null, 2);
 
         // Truncate very large responses
         if (responseStr.length > 10000) {
@@ -3230,7 +3167,7 @@ export function loadInstalledTools(db: {
     return installed.map((tool) => ({
       name: tool.name,
       description: `Installed tool: ${tool.name}`,
-      category: (tool.type === "mcp" ? "conway" : "vm") as ToolCategory,
+      category: (tool.type === "mcp" ? "runtime" : "vm") as ToolCategory,
       riskLevel: "caution" as RiskLevel,
       parameters: (tool.config?.parameters as Record<string, unknown>) || {
         type: "object",

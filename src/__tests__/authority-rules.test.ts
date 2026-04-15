@@ -158,7 +158,7 @@ describe("Authority Rules", () => {
       const tool = createMockTool({
         name: "delete_sandbox",
         riskLevel: "dangerous",
-        category: "conway",
+        category: "runtime",
       });
       const request = createRequest(tool, {}, undefined);
 
@@ -267,7 +267,7 @@ describe("Authority Rules", () => {
       const tool = createMockTool({
         name: "delete_sandbox",
         riskLevel: "dangerous",
-        category: "conway",
+        category: "runtime",
       });
       const request = createRequest(tool, {}, "agent");
 
@@ -577,7 +577,7 @@ describe("Financial Phase 1 Rules", () => {
       const tool = createMockTool({
         name: "chat",
         riskLevel: "safe",
-        category: "conway",
+        category: "runtime",
       });
       const spendTracker = createMockSpendTracker({
         getDailySpend: (category: SpendCategory) =>
@@ -596,7 +596,7 @@ describe("Financial Phase 1 Rules", () => {
       const tool = createMockTool({
         name: "chat",
         riskLevel: "safe",
-        category: "conway",
+        category: "runtime",
       });
       const spendTracker = createMockSpendTracker({
         getDailySpend: (category: SpendCategory) =>
@@ -678,7 +678,7 @@ describe("Treasury Config", () => {
     expect(DEFAULT_TREASURY_POLICY.maxDailyTransferCents).toBe(25000);
     expect(DEFAULT_TREASURY_POLICY.minimumReserveCents).toBe(1000);
     expect(DEFAULT_TREASURY_POLICY.maxX402PaymentCents).toBe(100);
-    expect(DEFAULT_TREASURY_POLICY.x402AllowedDomains).toEqual(["conway.tech"]);
+    expect(DEFAULT_TREASURY_POLICY.x402AllowedDomains).toEqual(["localhost", "127.0.0.1"]);
     expect(DEFAULT_TREASURY_POLICY.transferCooldownMs).toBe(0);
     expect(DEFAULT_TREASURY_POLICY.maxTransfersPerTurn).toBe(2);
     expect(DEFAULT_TREASURY_POLICY.maxInferenceDailyCents).toBe(50000);

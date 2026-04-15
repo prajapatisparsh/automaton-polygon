@@ -7,8 +7,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { DurableScheduler } from "../heartbeat/scheduler.js";
 import { buildTickContext } from "../heartbeat/tick-context.js";
+import * as polygon from "../payments/polygon.js";
 import {
-  MockConwayClient,
+  MockRuntimeClient,
   createTestDb,
   createTestIdentity,
   createTestConfig,
@@ -49,7 +50,7 @@ const DEFAULT_HB_CONFIG: HeartbeatConfig = {
 
 function createLegacyContext(
   db: AutomatonDatabase,
-  conway: MockConwayClient,
+  conway: MockRuntimeClient,
 ): HeartbeatLegacyContext {
   return {
     identity: createTestIdentity(),
@@ -88,15 +89,16 @@ function seedScheduleRow(
 describe("DurableScheduler", () => {
   let db: AutomatonDatabase;
   let rawDb: DatabaseType;
-  let conway: MockConwayClient;
+  let conway: MockRuntimeClient;
 
   beforeEach(() => {
     db = createTestDb();
     rawDb = db.raw;
-    conway = new MockConwayClient();
+    conway = new MockRuntimeClient();
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     db.close();
   });
 
@@ -356,17 +358,19 @@ describe("DurableScheduler", () => {
 
   describe("TickContext building", () => {
     it("fetches balance once and builds context", async () => {
-      conway.creditsCents = 5_000;
+      vi.spyOn(polygon, "getUSDCBalance").mockResolvedValue(50);
 
       const ctx = await buildTickContext(
         rawDb,
         conway,
         DEFAULT_HB_CONFIG,
+        createTestIdentity().address,
       );
 
       expect(ctx.tickId).toBeTruthy();
       expect(ctx.startedAt).toBeInstanceOf(Date);
       expect(ctx.creditBalance).toBe(5_000);
+      expect(ctx.usdcBalance).toBe(50);
       expect(ctx.survivalTier).toBe("high");
       expect(ctx.lowComputeMultiplier).toBe(4);
       expect(ctx.config).toBe(DEFAULT_HB_CONFIG);
@@ -374,20 +378,18 @@ describe("DurableScheduler", () => {
     });
 
     it("handles API failure gracefully", async () => {
-      // Make getCreditsBalance throw
-      conway.getCreditsBalance = async () => {
-        throw new Error("API unavailable");
-      };
+      vi.spyOn(polygon, "getUSDCBalance").mockRejectedValue(new Error("API unavailable"));
 
       const ctx = await buildTickContext(
         rawDb,
         conway,
         DEFAULT_HB_CONFIG,
+        createTestIdentity().address,
       );
 
-      // Should default to 0 credits (critical tier — zero is broke, not dead)
+      // Zero treasury is treated as dead in the Polygon treasury model.
       expect(ctx.creditBalance).toBe(0);
-      expect(ctx.survivalTier).toBe("critical");
+      expect(ctx.survivalTier).toBe("dead");
     });
   });
 

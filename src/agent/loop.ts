@@ -10,7 +10,7 @@ import type {
   AutomatonIdentity,
   AutomatonConfig,
   AutomatonDatabase,
-  ConwayClient,
+  RuntimeClient,
   InferenceClient,
   AgentState,
   AgentTurn,
@@ -21,6 +21,7 @@ import type {
   Skill,
   SocialClientInterface,
   SpendTrackerInterface,
+  SurvivalTier,
   InputSource,
   ModelStrategyConfig,
 } from "../types.js";
@@ -35,8 +36,8 @@ import {
   executeTool,
 } from "./tools.js";
 import { sanitizeInput } from "./injection-defense.js";
-import { getSurvivalTier } from "../conway/credits.js";
-import { getUsdcBalance } from "../conway/x402.js";
+import { getSurvivalTier } from "../payments/credits.js";
+import { getUSDCBalance } from "../payments/polygon.js";
 import {
   claimInboxMessages,
   markInboxProcessed,
@@ -76,7 +77,7 @@ export interface AgentLoopOptions {
   identity: AutomatonIdentity;
   config: AutomatonConfig;
   db: AutomatonDatabase;
-  conway: ConwayClient;
+  conway: RuntimeClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
   skills?: Skill[];
@@ -97,7 +98,7 @@ export async function runAgentLoop(
   const { identity, config, db, conway, inference, social, skills, policyEngine, spendTracker, onStateChange, onTurnComplete, ollamaBaseUrl } =
     options;
 
-  const builtinTools = createBuiltinTools(identity.sandboxId);
+  const builtinTools = createBuiltinTools(identity.runtimeId);
   const installedTools = loadInstalledTools(db);
   const tools = [...builtinTools, ...installedTools];
   const toolContext: ToolContext = {
@@ -135,27 +136,15 @@ export async function runAgentLoop(
     try {
       planModeController = new PlanModeController(db.raw);
 
-      // Bridge automaton config API keys to env vars for the provider registry.
-      // The registry reads keys from process.env; the automaton config may have
-      // them from config.json or Conway provisioning.
+      // Bridge configured provider keys into process.env for the provider registry.
       if (config.openaiApiKey && !process.env.OPENAI_API_KEY) {
         process.env.OPENAI_API_KEY = config.openaiApiKey;
       }
       if (config.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
         process.env.ANTHROPIC_API_KEY = config.anthropicApiKey;
       }
-      // Conway Compute API is OpenAI-compatible. Use it as fallback when no
-      // direct OpenAI key is available. The conwayApiKey is always present
-      // (required for sandbox operations), so this ensures the orchestrator
-      // can always make inference calls.
-      if (config.conwayApiKey && !process.env.CONWAY_API_KEY) {
-        process.env.CONWAY_API_KEY = config.conwayApiKey;
-      }
-      // If no OpenAI key is set but Conway key is available, use Conway as
-      // the OpenAI provider (Conway Compute is OpenAI API-compatible).
-      if (!process.env.OPENAI_API_KEY && config.conwayApiKey) {
-        process.env.OPENAI_API_KEY = config.conwayApiKey;
-        process.env.OPENAI_BASE_URL = `${config.conwayApiUrl}/v1`;
+      if (config.ollamaBaseUrl && !process.env.OLLAMA_BASE_URL) {
+        process.env.OLLAMA_BASE_URL = config.ollamaBaseUrl;
       }
 
       const providersPath = path.join(
@@ -165,8 +154,7 @@ export async function runAgentLoop(
       );
       const registry = ProviderRegistry.fromConfig(providersPath);
 
-      // If OPENAI_BASE_URL was set (Conway fallback), update the default
-      // provider's baseUrl so the OpenAI client points to Conway Compute.
+      // Respect explicit base URL overrides when present.
       if (process.env.OPENAI_BASE_URL) {
         registry.overrideBaseUrl("openai", process.env.OPENAI_BASE_URL);
       }
@@ -188,8 +176,8 @@ export async function runAgentLoop(
       );
 
       // Adapter: wrap the main agent's working inference client so local
-      // workers can use it. The main InferenceClient talks to Conway Compute
-      // (which always works), unlike the UnifiedInferenceClient which needs
+      // workers can use it. The main InferenceClient talks to the active
+      // runtime provider, unlike the UnifiedInferenceClient which needs
       // a direct OpenAI key.
       const workerInference = {
         chat: async (params: { messages: any[]; tools?: any[]; maxTokens?: number; temperature?: number }) => {
@@ -209,7 +197,7 @@ export async function runAgentLoop(
       };
 
       // Local worker pool: runs inference-driven agents in-process
-      // as async tasks. Falls back from Conway sandbox spawning.
+      // as async tasks. Falls back from remote runtime spawning.
       const workerPool = new LocalWorkerPool({
         db: db.raw,
         inference: workerInference,
@@ -238,7 +226,7 @@ export async function runAgentLoop(
         config: {
           ...config,
           spawnAgent: async (task: any) => {
-            // Try Conway sandbox spawn first (production)
+            // Try remote runtime spawn first (production)
             try {
               const { generateGenesisConfig } = await import("../replication/genesis.js");
               const { spawnChild } = await import("../replication/spawn.js");
@@ -256,70 +244,10 @@ export async function runAgentLoop(
               return {
                 address: child.address,
                 name: child.name,
-                sandboxId: child.sandboxId,
+                runtimeId: child.runtimeId,
               };
             } catch (sandboxError: any) {
-              // If the error is a 402 (insufficient credits), attempt topup and retry once
-              const is402 = sandboxError?.status === 402 ||
-                sandboxError?.message?.includes("INSUFFICIENT_CREDITS");
-
-              if (is402) {
-                const SANDBOX_TOPUP_COOLDOWN_MS = 60_000;
-                const lastAttempt = db.getKV("last_sandbox_topup_attempt");
-                const cooldownExpired = !lastAttempt ||
-                  Date.now() - new Date(lastAttempt).getTime() >= SANDBOX_TOPUP_COOLDOWN_MS;
-
-                if (cooldownExpired) {
-                  db.setKV("last_sandbox_topup_attempt", new Date().toISOString());
-                  try {
-                    const { topupForSandbox } = await import("../conway/topup.js");
-                    const topupResult = await topupForSandbox({
-                      apiUrl: config.conwayApiUrl,
-                      account: identity.account,
-                      error: sandboxError,
-                      chainType: config.chainType || identity.chainType || "evm",
-                    });
-
-                    if (topupResult?.success) {
-                      logger.info(`Sandbox topup succeeded ($${topupResult.amountUsd}), retrying spawn`, {
-                        taskId: task.id,
-                      });
-                      // Retry spawn once after successful topup
-                      try {
-                        const { generateGenesisConfig: genGenesis } = await import("../replication/genesis.js");
-                        const { spawnChild: retrySpawn } = await import("../replication/spawn.js");
-                        const { ChildLifecycle: RetryLifecycle } = await import("../replication/lifecycle.js");
-
-                        const retryRole = task.agentRole ?? "generalist";
-                        const retryGenesis = genGenesis(identity, config, {
-                          name: `worker-${retryRole}-${Date.now().toString(36)}`,
-                          specialization: `${retryRole}: ${task.title}`,
-                        });
-                        const retryLifecycle = new RetryLifecycle(db.raw);
-                        const child = await retrySpawn(conway, identity, db, retryGenesis, retryLifecycle);
-                        return {
-                          address: child.address,
-                          name: child.name,
-                          sandboxId: child.sandboxId,
-                        };
-                      } catch (retryError) {
-                        logger.warn("Spawn retry after topup failed", {
-                          taskId: task.id,
-                          error: retryError instanceof Error ? retryError.message : String(retryError),
-                        });
-                      }
-                    }
-                  } catch (topupError) {
-                    logger.warn("Sandbox topup attempt failed", {
-                      taskId: task.id,
-                      error: topupError instanceof Error ? topupError.message : String(topupError),
-                    });
-                  }
-                }
-              }
-
-              // Conway sandbox unavailable — fall back to local worker
-              logger.info("Conway sandbox unavailable, spawning local worker", {
+              logger.info("Sandbox runtime unavailable, spawning local worker", {
                 taskId: task.id,
                 error: sandboxError instanceof Error ? sandboxError.message : String(sandboxError),
               });
@@ -394,7 +322,7 @@ export async function runAgentLoop(
   db.setAgentState("running");
   onStateChange?.("running");
 
-  log(config, `[WAKE UP] ${config.name} is alive. Credits: $${(financial.creditsCents / 100).toFixed(2)}`);
+  log(config, `[WAKE UP] ${config.name} is alive. Treasury: $${(financial.creditsCents / 100).toFixed(2)}`);
 
   // ─── The Loop ──────────────────────────────────────────────
 
@@ -450,49 +378,23 @@ export async function runAgentLoop(
       // Check survival tier
       // api_unreachable: creditsCents === -1 means API failed with no cache.
       // Do NOT kill the agent; continue in low-compute mode and retry next tick.
+      let routingTier: SurvivalTier;
       if (financial.creditsCents === -1) {
         log(config, "[API_UNREACHABLE] Balance API unreachable, continuing in low-compute mode.");
         inference.setLowComputeMode(true);
+        routingTier = "low_compute";
       } else {
-        const tier = getSurvivalTier(financial.creditsCents);
-
-        // Inline auto-topup: if credits are critically low and USDC is
-        // available, buy credits NOW — before attempting inference.
-        // This prevents the agent from dying mid-loop while waiting for
-        // the heartbeat to fire. Uses a 60s cooldown to avoid hammering.
-        if ((tier === "critical" || tier === "low_compute") && financial.usdcBalance >= 5) {
-          const INLINE_TOPUP_COOLDOWN_MS = 60_000;
-          const lastInlineTopup = db.getKV("last_inline_topup_attempt");
-          const cooldownExpired = !lastInlineTopup ||
-            Date.now() - new Date(lastInlineTopup).getTime() >= INLINE_TOPUP_COOLDOWN_MS;
-
-          if (cooldownExpired) {
-            db.setKV("last_inline_topup_attempt", new Date().toISOString());
-            try {
-              const { bootstrapTopup } = await import("../conway/topup.js");
-              const topupResult = await bootstrapTopup({
-                apiUrl: config.conwayApiUrl,
-                account: identity.account,
-                creditsCents: financial.creditsCents,
-                chainType: config.chainType || identity.chainType || "evm",
-              });
-              if (topupResult?.success) {
-                log(config, `[AUTO-TOPUP] Bought $${topupResult.amountUsd} credits from USDC mid-loop`);
-                // Re-fetch financial state after topup so the rest of
-                // the turn sees the updated balance.
-                financial = await getFinancialState(conway, identity.address, db, config.chainType || identity.chainType || "evm");
-              }
-            } catch (err: any) {
-              logger.warn(`Inline auto-topup failed: ${err.message}`);
-            }
-          }
-        }
-
-        // Re-evaluate tier after potential topup
         const effectiveTier = getSurvivalTier(financial.creditsCents);
+        routingTier = effectiveTier;
 
-        if (effectiveTier === "critical") {
-          log(config, "[CRITICAL] Credits critically low. Limited operation.");
+        if (effectiveTier === "dead") {
+          log(config, "[DEAD] Treasury depleted. Entering dead state.");
+          db.setAgentState("dead");
+          onStateChange?.("dead");
+          running = false;
+          break;
+        } else if (effectiveTier === "critical") {
+          log(config, "[CRITICAL] Treasury critically low. Limited operation.");
           db.setAgentState("critical");
           onStateChange?.("critical");
           inference.setLowComputeMode(true);
@@ -599,15 +501,14 @@ export async function runAgentLoop(
       pendingInput = undefined;
 
       // ── Inference Call (via router when available) ──
-      const survivalTier = getSurvivalTier(financial.creditsCents);
-      log(config, `[THINK] Routing inference (tier: ${survivalTier}, model: ${inference.getDefaultModel()})...`);
+      log(config, `[THINK] Routing inference (tier: ${routingTier}, model: ${inference.getDefaultModel()})...`);
 
       const inferenceTools = toolsToInferenceFormat(tools);
       const routerResult = await inferenceRouter.route(
         {
           messages: messages,
           taskType: "agent_turn",
-          tier: survivalTier,
+          tier: routingTier,
           sessionId: db.getKV("session_id") || "default",
           turnId: ulid(),
           tools: inferenceTools,
@@ -947,7 +848,7 @@ let _lastKnownCredits = 0;
 let _lastKnownUsdc = 0;
 
 async function getFinancialState(
-  conway: ConwayClient,
+  conway: RuntimeClient,
   address: string,
   db?: AutomatonDatabase,
   chainType?: string,
@@ -987,8 +888,11 @@ async function getFinancialState(
   }
 
   try {
-    const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
-    usdcBalance = await getUsdcBalance(address, network, chainType as any);
+    if (chainType === "solana") {
+      usdcBalance = 0;
+    } else {
+      usdcBalance = await getUSDCBalance(address);
+    }
     if (usdcBalance > 0) _lastKnownUsdc = usdcBalance;
   } catch (error) {
     logger.error("USDC balance fetch failed", error instanceof Error ? error : undefined);

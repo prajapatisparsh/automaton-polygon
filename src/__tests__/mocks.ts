@@ -8,7 +8,7 @@ import type {
   InferenceResponse,
   InferenceOptions,
   ChatMessage,
-  ConwayClient,
+  RuntimeClient,
   ExecResult,
   PortInfo,
   SandboxInfo,
@@ -66,9 +66,16 @@ export class MockInferenceClient implements InferenceClient {
   }
 }
 
+let mockIdCounter = 0;
+
+function nextMockId(prefix: string): string {
+  mockIdCounter += 1;
+  return `${prefix}_${mockIdCounter}`;
+}
+
 export function noToolResponse(text = ""): InferenceResponse {
   return {
-    id: `resp_${Date.now()}`,
+    id: nextMockId("resp"),
     model: "mock-model",
     message: { role: "assistant", content: text },
     usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
@@ -80,9 +87,9 @@ export function toolCallResponse(
   toolCalls: { name: string; arguments: Record<string, unknown> }[],
   text = "",
 ): InferenceResponse {
-  const now = Date.now();
+  const responseId = nextMockId("resp");
   const mapped = toolCalls.map((tc, i) => ({
-    id: `call_${i}_${now}`,
+    id: `${responseId}_call_${i}`,
     type: "function" as const,
     function: {
       name: tc.name,
@@ -91,7 +98,7 @@ export function toolCallResponse(
   }));
 
   return {
-    id: `resp_${now}`,
+    id: responseId,
     model: "mock-model",
     message: {
       role: "assistant",
@@ -104,9 +111,9 @@ export function toolCallResponse(
   };
 }
 
-// ─── Mock Conway Client ─────────────────────────────────────────
+// ─── Mock Runtime Client ────────────────────────────────────────
 
-export class MockConwayClient implements ConwayClient {
+export class MockRuntimeClient implements RuntimeClient {
   execCalls: { command: string; timeout?: number }[] = [];
   creditsCents = 10_000; // $100 default
   files: Record<string, string> = {};
@@ -128,7 +135,7 @@ export class MockConwayClient implements ConwayClient {
     return {
       port,
       publicUrl: `https://test-${port}.conway.tech`,
-      sandboxId: "test-sandbox",
+      runtimeId: "test-sandbox",
     };
   }
 
@@ -219,7 +226,7 @@ export class MockConwayClient implements ConwayClient {
     return { automaton: {} };
   }
 
-  createScopedClient(_targetSandboxId: string): ConwayClient {
+  createScopedClient(_targetRuntimeId: string): RuntimeClient {
     // Return self so spies on exec/writeFile propagate to scoped clients
     return this;
   }
@@ -235,7 +242,7 @@ export class MockSocialClient implements SocialClientInterface {
 
   async send(to: string, content: string, replyTo?: string): Promise<{ id: string }> {
     this.sentMessages.push({ to, content, replyTo });
-    return { id: `msg_${Date.now()}` };
+    return { id: nextMockId("msg") };
   }
 
   async poll(
@@ -323,7 +330,7 @@ export function createTestIdentity(): AutomatonIdentity {
     address: "0x1234567890abcdef1234567890abcdef12345678" as `0x${string}`,
     account: {} as any, // Placeholder — not used in most tests
     creatorAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd" as `0x${string}`,
-    sandboxId: "test-sandbox-id",
+    runtimeId: "test-sandbox-id",
     apiKey: "test-api-key",
     createdAt: new Date().toISOString(),
   };
@@ -337,7 +344,7 @@ export function createTestConfig(
     genesisPrompt: "You are a test automaton.",
     creatorAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd" as `0x${string}`,
     registeredWithConway: true,
-    sandboxId: "test-sandbox-id",
+    runtimeId: "test-sandbox-id",
     conwayApiUrl: "https://api.conway.tech",
     conwayApiKey: "test-api-key",
     inferenceModel: "mock-model",

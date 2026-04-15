@@ -8,13 +8,13 @@
 import type {
   AutomatonConfig,
   AutomatonDatabase,
-  ConwayClient,
+  RuntimeClient,
   AutomatonIdentity,
   FinancialState,
   SurvivalTier,
 } from "../types.js";
-import { getSurvivalTier, formatCredits } from "../conway/credits.js";
-import { getUsdcBalance } from "../conway/x402.js";
+import { getSurvivalTier } from "../payments/credits.js";
+import { formatUsdAmount, getUSDCBalance, toUsdcCents } from "../payments/polygon.js";
 
 export interface ResourceStatus {
   financial: FinancialState;
@@ -29,29 +29,16 @@ export interface ResourceStatus {
  */
 export async function checkResources(
   identity: AutomatonIdentity,
-  conway: ConwayClient,
+  _conway: RuntimeClient,
   db: AutomatonDatabase,
 ): Promise<ResourceStatus> {
-  // Check credits
-  let creditsCents = 0;
-  try {
-    creditsCents = await conway.getCreditsBalance();
-  } catch {}
-
-  // Check USDC
   let usdcBalance = 0;
   try {
-    usdcBalance = await getUsdcBalance(identity.address);
+    usdcBalance = await getUSDCBalance(identity.address);
   } catch {}
 
-  // Check sandbox health
-  let sandboxHealthy = true;
-  try {
-    const result = await conway.exec("echo ok", 5000);
-    sandboxHealthy = result.exitCode === 0;
-  } catch {
-    sandboxHealthy = false;
-  }
+  const creditsCents = toUsdcCents(usdcBalance);
+  const sandboxHealthy = true;
 
   const financial: FinancialState = {
     creditsCents,
@@ -85,10 +72,10 @@ export async function checkResources(
 export function formatResourceReport(status: ResourceStatus): string {
   const lines = [
     `=== RESOURCE STATUS ===`,
-    `Credits: ${formatCredits(status.financial.creditsCents)}`,
+    `Treasury: ${formatUsdAmount(status.financial.usdcBalance)}`,
     `USDC: ${status.financial.usdcBalance.toFixed(6)}`,
     `Tier: ${status.tier}${status.tierChanged ? ` (changed from ${status.previousTier})` : ""}`,
-    `Sandbox: ${status.sandboxHealthy ? "healthy" : "UNHEALTHY"}`,
+    `Runtime: ${status.sandboxHealthy ? "healthy" : "UNHEALTHY"}`,
     `Checked: ${status.financial.lastChecked}`,
     `========================`,
   ];

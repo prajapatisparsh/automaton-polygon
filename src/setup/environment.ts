@@ -1,37 +1,25 @@
 import fs from "fs";
+import os from "os";
 
 export interface EnvironmentInfo {
   type: string;
-  sandboxId: string;
+  runtimeId: string;
 }
 
 export function detectEnvironment(): EnvironmentInfo {
-  // 1. Check env var
-  if (process.env.CONWAY_SANDBOX_ID) {
-    const sandboxId = process.env.CONWAY_SANDBOX_ID.trim();
-    if (sandboxId) {
-      return { type: "conway-sandbox", sandboxId };
+  // 1. Check explicit runtime override
+  if (process.env.AUTOMATON_RUNTIME_ID) {
+    const runtimeId = process.env.AUTOMATON_RUNTIME_ID.trim();
+    if (runtimeId) {
+      return { type: "local-runtime", runtimeId };
     }
   }
 
-  // 2. Check sandbox config file
-  try {
-    if (fs.existsSync("/etc/conway/sandbox.json")) {
-      const data = JSON.parse(fs.readFileSync("/etc/conway/sandbox.json", "utf-8"));
-      if (data.id) {
-        const sandboxId = String(data.id).trim();
-        if (sandboxId) {
-          return { type: "conway-sandbox", sandboxId };
-        }
-      }
-    }
-  } catch {}
-
-  // 3. Check Docker
+  // 2. Check Docker
   if (fs.existsSync("/.dockerenv")) {
-    return { type: "docker", sandboxId: "" };
+    return { type: "docker", runtimeId: `docker-${os.hostname()}` };
   }
 
-  // 4. Fall back to platform
-  return { type: process.platform, sandboxId: "" };
+  // 3. Fall back to a stable local runtime id
+  return { type: process.platform, runtimeId: `local-${os.hostname()}` };
 }

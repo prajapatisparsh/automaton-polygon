@@ -9,7 +9,6 @@ import path from "path";
 import type { AutomatonConfig, TreasuryPolicy, ModelStrategyConfig, SoulConfig } from "./types.js";
 import { DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG, DEFAULT_SOUL_CONFIG } from "./types.js";
 import { getAutomatonDir } from "./identity/wallet.js";
-import { loadApiKeyFromConfig } from "./identity/provision.js";
 import { createLogger } from "./observability/logger.js";
 import type { ChainType } from "./identity/chain.js";
 
@@ -18,6 +17,12 @@ const CONFIG_FILENAME = "automaton.json";
 
 export function getConfigPath(): string {
   return path.join(getAutomatonDir(), CONFIG_FILENAME);
+}
+
+function normalizeRuntimeId(value: unknown): string {
+  return typeof value === "string" && value.trim()
+    ? value.trim()
+    : DEFAULT_CONFIG.runtimeId || "local-runtime";
 }
 
 /**
@@ -32,7 +37,6 @@ export function loadConfig(): AutomatonConfig | null {
 
   try {
     const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const apiKey = raw.conwayApiKey || loadApiKeyFromConfig();
 
     // Deep-merge treasury policy with defaults
     const treasuryPolicy: TreasuryPolicy = {
@@ -64,15 +68,11 @@ export function loadConfig(): AutomatonConfig | null {
     return {
       ...DEFAULT_CONFIG,
       ...raw,
-      sandboxId:
-        typeof raw.sandboxId === "string"
-          ? raw.sandboxId.trim()
-          : DEFAULT_CONFIG.sandboxId,
-      conwayApiKey: apiKey,
+      runtimeId: normalizeRuntimeId(raw.runtimeId ?? raw.sandboxId),
       treasuryPolicy,
       modelStrategy,
       soulConfig,
-      chainType: raw.chainType || "evm",
+      chainType: "evm",
     } as AutomatonConfig;
   } catch {
     return null;
@@ -119,10 +119,8 @@ export function createConfig(params: {
   genesisPrompt: string;
   creatorMessage?: string;
   creatorAddress: string;
-  registeredWithConway: boolean;
-  sandboxId: string;
+  runtimeId: string;
   walletAddress: string;
-  apiKey: string;
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
@@ -130,21 +128,17 @@ export function createConfig(params: {
   treasuryPolicy?: TreasuryPolicy;
   chainType?: ChainType;
 }): AutomatonConfig {
-  const normalizedSandboxId = (params.sandboxId || "").trim();
+  const normalizedRuntimeId = normalizeRuntimeId(params.runtimeId);
   return {
     name: params.name,
     genesisPrompt: params.genesisPrompt,
     creatorMessage: params.creatorMessage,
     creatorAddress: params.creatorAddress,
-    registeredWithConway: params.registeredWithConway,
-    sandboxId: normalizedSandboxId,
-    conwayApiUrl:
-      DEFAULT_CONFIG.conwayApiUrl || "https://api.conway.tech",
-    conwayApiKey: params.apiKey,
+    runtimeId: normalizedRuntimeId,
     openaiApiKey: params.openaiApiKey,
     anthropicApiKey: params.anthropicApiKey,
-    ollamaBaseUrl: params.ollamaBaseUrl,
-    inferenceModel: DEFAULT_CONFIG.inferenceModel || "gpt-5.2",
+    ollamaBaseUrl: params.ollamaBaseUrl || DEFAULT_CONFIG.ollamaBaseUrl,
+    inferenceModel: DEFAULT_CONFIG.inferenceModel || "gemma4:e4b",
     maxTokensPerTurn: DEFAULT_CONFIG.maxTokensPerTurn || 4096,
     heartbeatConfigPath:
       DEFAULT_CONFIG.heartbeatConfigPath || "~/.automaton/heartbeat.yml",
@@ -156,6 +150,6 @@ export function createConfig(params: {
     maxChildren: DEFAULT_CONFIG.maxChildren || 3,
     parentAddress: params.parentAddress,
     treasuryPolicy: params.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
-    chainType: params.chainType || "evm",
+    chainType: "evm",
   };
 }

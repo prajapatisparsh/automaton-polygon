@@ -52,7 +52,7 @@ function createTestDb(options?: { address?: string; recipients?: string[] }): {
     id: `child-${index}`,
     name: `Child ${index}`,
     address: entry as `0x${string}`,
-    sandboxId: `sandbox-${index}`,
+    runtimeId: `sandbox-${index}`,
     genesisPrompt: "test",
     creatorMessage: "test",
     fundedAmountCents: 0,

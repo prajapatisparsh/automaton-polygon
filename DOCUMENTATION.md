@@ -279,12 +279,12 @@ Configuration is stored at `~/.automaton/automaton.json`.
   "walletAddress": "0x...",                      // Agent's Ethereum address
 
   // Infrastructure
-  "sandboxId": "sbx_abc123",                    // Conway sandbox ID (empty = local mode)
-  "conwayApiUrl": "https://api.conway.tech",    // Conway API endpoint
-  "conwayApiKey": "cnwy_k_...",                 // API key
+  "runtimeId": "local-runtime",                 // Local runtime identifier
+  "ollamaBaseUrl": "http://localhost:11434",    // Local Ollama endpoint
+  "rpcUrl": "https://polygon-rpc.com",          // Polygon RPC endpoint
 
   // Inference
-  "inferenceModel": "gpt-5.2",                  // Default model
+  "inferenceModel": "gemma4:e4b",               // Default local model
   "maxTokensPerTurn": 4096,                     // Max tokens per inference call
   "openaiApiKey": "sk-...",                      // Optional BYOK OpenAI
   "anthropicApiKey": "sk-ant-...",               // Optional BYOK Anthropic
@@ -307,7 +307,7 @@ Configuration is stored at `~/.automaton/automaton.json`.
     "maxDailyTransferCents": 25000,
     "minimumReserveCents": 1000,
     "maxX402PaymentCents": 100,
-    "x402AllowedDomains": ["conway.tech"],
+    "x402AllowedDomains": ["localhost", "127.0.0.1"],
     "transferCooldownMs": 0,
     "maxTransfersPerTurn": 2,
     "maxInferenceDailyCents": 50000,
@@ -321,9 +321,9 @@ Configuration is stored at `~/.automaton/automaton.json`.
 }
 ```
 
-### Local mode vs sandbox mode
+### Local runtime model
 
-When `sandboxId` is empty, the automaton runs in **local mode**: shell commands execute locally, file operations use the local filesystem. When set, operations route through the Conway sandbox API. On 403 errors (mismatched API key), the runtime falls back to local execution.
+The current runtime is local-first. `runtimeId` identifies the active runtime for bookkeeping and child-runtime scoping, while shell commands and filesystem operations execute locally. Treasury state comes from Polygon USDC balance, and inference defaults to local Ollama with optional GLM burst capacity when `GLM_API_KEY` is set.
 
 ---
 
@@ -1134,7 +1134,7 @@ The balance API may be temporarily unreachable. The runtime caches the last know
 
 **Can I run an automaton locally without Conway Cloud?**
 
-Yes. Leave `sandboxId` empty in the config. The automaton runs locally: shell commands execute on your machine, files read/write from your filesystem. You still need an API key for inference.
+Yes. The current runtime is local by default. Set `runtimeId` if you want a custom runtime label, point `ollamaBaseUrl` at your local Ollama instance, and optionally export `GLM_API_KEY` if you want FULL-tier burst inference.
 
 **How much does it cost to run an automaton?**
 

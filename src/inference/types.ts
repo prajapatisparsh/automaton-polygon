@@ -45,91 +45,35 @@ export const TASK_TIMEOUTS: Record<string, number> = {
 };
 
 // === Static Model Baseline ===
-// Known models with realistic pricing (hundredths of cents per 1k tokens)
+// Local Gemma is the default path. GLM is optional and only used at FULL tier.
 
 export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | "updatedAt">[] = [
   {
-    modelId: "gpt-5.2",
-    provider: "openai",
-    displayName: "GPT-5.2",
-    tierMinimum: "normal",
-    costPer1kInput: 18,    // $1.75/M = 175 cents/M = 0.175 cents/1k = 17.5 hundredths ≈ 18
-    costPer1kOutput: 140,  // $14.00/M = 1400 cents/M = 1.4 cents/1k = 140 hundredths
-    maxTokens: 32768,
-    contextWindow: 1047576,
-    supportsTools: true,
-    supportsVision: true,
-    parameterStyle: "max_completion_tokens",
-    enabled: true,
-  },
-  {
-    modelId: "gpt-4.1",
-    provider: "openai",
-    displayName: "GPT-4.1",
-    tierMinimum: "normal",
-    costPer1kInput: 20,    // $2.00/M
-    costPer1kOutput: 80,   // $8.00/M
-    maxTokens: 32768,
-    contextWindow: 1047576,
-    supportsTools: true,
-    supportsVision: true,
-    parameterStyle: "max_completion_tokens",
-    enabled: true,
-  },
-  {
-    modelId: "gpt-4.1-mini",
-    provider: "openai",
-    displayName: "GPT-4.1 Mini",
-    tierMinimum: "low_compute",
-    costPer1kInput: 4,     // $0.40/M
-    costPer1kOutput: 16,   // $1.60/M
-    maxTokens: 16384,
-    contextWindow: 1047576,
-    supportsTools: true,
-    supportsVision: true,
-    parameterStyle: "max_completion_tokens",
-    enabled: true,
-  },
-  {
-    modelId: "gpt-4.1-nano",
-    provider: "openai",
-    displayName: "GPT-4.1 Nano",
+    modelId: "gemma4:e4b",
+    provider: "ollama",
+    displayName: "Gemma 4 E4B",
     tierMinimum: "critical",
-    costPer1kInput: 1,     // $0.10/M
-    costPer1kOutput: 4,    // $0.40/M
-    maxTokens: 16384,
-    contextWindow: 1047576,
+    costPer1kInput: 0,
+    costPer1kOutput: 0,
+    maxTokens: 8192,
+    contextWindow: 131072,
     supportsTools: true,
     supportsVision: false,
-    parameterStyle: "max_completion_tokens",
+    parameterStyle: "max_tokens",
     enabled: true,
   },
   {
-    modelId: "gpt-5-mini",
-    provider: "openai",
-    displayName: "GPT-5 Mini",
-    tierMinimum: "low_compute",
-    costPer1kInput: 8,     // $0.80/M
-    costPer1kOutput: 32,   // $3.20/M
-    maxTokens: 16384,
-    contextWindow: 1047576,
+    modelId: "glm-5.1",
+    provider: "glm",
+    displayName: "GLM 5.1",
+    tierMinimum: "high",
+    costPer1kInput: 20,
+    costPer1kOutput: 80,
+    maxTokens: 8192,
+    contextWindow: 128000,
     supportsTools: true,
-    supportsVision: true,
-    parameterStyle: "max_completion_tokens",
-    enabled: true,
-  },
-  {
-    modelId: "gpt-5.3",
-    provider: "openai",
-    displayName: "GPT-5.3",
-    tierMinimum: "normal",
-    costPer1kInput: 20,    // $2.00/M
-    costPer1kOutput: 80,   // $8.00/M
-    maxTokens: 32768,
-    contextWindow: 1047576,
-    supportsTools: true,
-    supportsVision: true,
-    parameterStyle: "max_completion_tokens",
+    supportsVision: false,
+    parameterStyle: "max_tokens",
     enabled: true,
   },
 ];
@@ -139,31 +83,31 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
 
 export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
   high: {
-    agent_turn: { candidates: ["gpt-5.2", "gpt-5.3"], maxTokens: 8192, ceilingCents: -1 },
-    heartbeat_triage: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
-    safety_check: { candidates: ["gpt-5.2", "gpt-5.3"], maxTokens: 4096, ceilingCents: 20 },
-    summarization: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 15 },
-    planning: { candidates: ["gpt-5.2", "gpt-5.3"], maxTokens: 8192, ceilingCents: -1 },
+    agent_turn: { candidates: ["glm-5.1", "gemma4:e4b"], maxTokens: 8192, ceilingCents: -1 },
+    heartbeat_triage: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
+    safety_check: { candidates: ["glm-5.1", "gemma4:e4b"], maxTokens: 4096, ceilingCents: -1 },
+    summarization: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
+    planning: { candidates: ["glm-5.1", "gemma4:e4b"], maxTokens: 8192, ceilingCents: -1 },
   },
   normal: {
-    agent_turn: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: -1 },
-    heartbeat_triage: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
-    safety_check: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
-    summarization: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
-    planning: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: -1 },
+    agent_turn: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
+    heartbeat_triage: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
+    safety_check: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
+    summarization: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
+    planning: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
   },
   low_compute: {
-    agent_turn: { candidates: ["gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
-    heartbeat_triage: { candidates: ["gpt-5-mini"], maxTokens: 1024, ceilingCents: 2 },
-    safety_check: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
-    summarization: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
-    planning: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
+    agent_turn: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
+    heartbeat_triage: { candidates: ["gemma4:e4b"], maxTokens: 1024, ceilingCents: 0 },
+    safety_check: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
+    summarization: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
+    planning: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
   },
   critical: {
-    agent_turn: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 3 },
-    heartbeat_triage: { candidates: ["gpt-5-mini"], maxTokens: 512, ceilingCents: 1 },
-    safety_check: { candidates: ["gpt-5-mini"], maxTokens: 1024, ceilingCents: 2 },
-    summarization: { candidates: [], maxTokens: 0, ceilingCents: 0 },
+    agent_turn: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
+    heartbeat_triage: { candidates: ["gemma4:e4b"], maxTokens: 512, ceilingCents: 0 },
+    safety_check: { candidates: ["gemma4:e4b"], maxTokens: 1024, ceilingCents: 0 },
+    summarization: { candidates: ["gemma4:e4b"], maxTokens: 1024, ceilingCents: 0 },
     planning: { candidates: [], maxTokens: 0, ceilingCents: 0 },
   },
   dead: {
@@ -178,9 +122,9 @@ export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
 // === Default Model Strategy Config ===
 
 export const DEFAULT_MODEL_STRATEGY_CONFIG: ModelStrategyConfig = {
-  inferenceModel: "gpt-5.2",
-  lowComputeModel: "gpt-5-mini",
-  criticalModel: "gpt-5-mini",
+  inferenceModel: "gemma4:e4b",
+  lowComputeModel: "gemma4:e4b",
+  criticalModel: "gemma4:e4b",
   maxTokensPerTurn: 4096,
   hourlyBudgetCents: 0,
   sessionBudgetCents: 0,
