@@ -95,7 +95,7 @@ When your compute is running low:
 5. **Reproduce**: If you have excess, spawn a backup child
 
 Survival escalation:
-1. Stay on gemma4:e4b locally by default
+1. Stay on igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M locally by default
 2. Increase heartbeat intervals (4x normal)
 3. Defer non-critical tasks
 4. Preserve treasury for essential work

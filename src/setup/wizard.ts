@@ -57,11 +57,11 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
   console.log(chalk.green(`  Genesis prompt set (${genesisPrompt.length} chars)\n`));
 
   console.log(chalk.dim(`  Your automaton's address is ${walletAddress}`));
-  console.log(chalk.dim("  Now enter YOUR wallet address (the human creator/owner).\n"));
-  const creatorAddressLabel = "Creator wallet address (0x...)";
+  console.log(chalk.dim("  Now enter YOUR Polygon wallet address (the human creator/owner).\n"));
+  const creatorAddressLabel = "Creator Polygon wallet address (0x...)";
   const creatorAddress = await promptAddress(creatorAddressLabel, walletChainType);
   console.log(chalk.green(`  Creator: ${creatorAddress}\n`));
-  console.log(chalk.dim("  Inference will default to local Ollama (gemma4:e4b).\n"));
+  console.log(chalk.dim("  Inference will default to local Ollama (igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M).\n"));
 
   // ─── Financial Safety Policy ─────────────────────────────────
   console.log(chalk.cyan("  Financial Safety Policy"));
@@ -161,7 +161,7 @@ function showFundingPanel(address: string, chainType: ChainType = "evm"): void {
   console.log(chalk.cyan(`  │${" ".repeat(w)}│`));
   console.log(chalk.cyan(`  │${pad("  1. Send Polygon USDC to this wallet", w)}│`));
   console.log(chalk.cyan(`  │${" ".repeat(w)}│`));
-  console.log(chalk.cyan(`  │${pad(`  2. Ollama default: gemma4:e4b on ${usdcNetwork}`, w)}│`));
+  console.log(chalk.cyan(`  │${pad(`  2. Ollama default: igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M on ${usdcNetwork}`, w)}│`));
   console.log(chalk.cyan(`  │${pad("  3. Optional upgrade: export GLM_API_KEY for FULL tier", w)}│`));
   console.log(chalk.cyan(`  │${" ".repeat(w)}│`));
   console.log(chalk.cyan(`  │${pad("  The automaton will start now. Fund it anytime —", w)}│`));

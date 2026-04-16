@@ -205,7 +205,7 @@ export class InferenceRouter {
       strategy.lowComputeModel,
       strategy.inferenceModel,
       strategy.criticalModel,
-      "gemma4:e4b",
+      "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M",
     ];
 
     for (const modelId of ollamaCandidates) {

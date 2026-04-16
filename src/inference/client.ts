@@ -123,7 +123,7 @@ export function createInferenceClient(options: InferenceClientOptions): Inferenc
     chat,
     setLowComputeMode(enabled: boolean): void {
       currentModel = enabled
-        ? options.lowComputeModel || "gemma4:e4b"
+        ? options.lowComputeModel || "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"
         : options.defaultModel;
       maxTokens = enabled ? Math.min(options.maxTokens, 2048) : options.maxTokens;
     },

@@ -40,16 +40,16 @@ describe("getModelForTier", () => {
     expect(getModelForTier("normal", defaultModel)).toBe(defaultModel);
   });
 
-  it("returns gemma4:e4b for 'low_compute' tier", () => {
-    expect(getModelForTier("low_compute", defaultModel)).toBe("gemma4:e4b");
+  it("returns igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M for 'low_compute' tier", () => {
+    expect(getModelForTier("low_compute", defaultModel)).toBe("igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M");
   });
 
-  it("returns gemma4:e4b for 'critical' tier", () => {
-    expect(getModelForTier("critical", defaultModel)).toBe("gemma4:e4b");
+  it("returns igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M for 'critical' tier", () => {
+    expect(getModelForTier("critical", defaultModel)).toBe("igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M");
   });
 
-  it("returns gemma4:e4b for 'dead' tier", () => {
-    expect(getModelForTier("dead", defaultModel)).toBe("gemma4:e4b");
+  it("returns igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M for 'dead' tier", () => {
+    expect(getModelForTier("dead", defaultModel)).toBe("igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M");
   });
 
   it("returns the default model for 'normal' tier with custom default", () => {
@@ -129,25 +129,25 @@ describe("createInferenceClient setLowComputeMode", () => {
   it("uses lowComputeModel when provided", () => {
     const client = createInferenceClient({
       ...baseOptions,
-      lowComputeModel: "gemma4:e4b",
+      lowComputeModel: "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M",
     });
     client.setLowComputeMode(true);
-    expect(client.getDefaultModel()).toBe("gemma4:e4b");
+    expect(client.getDefaultModel()).toBe("igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M");
   });
 
-  it("falls back to gemma4:e4b when no lowComputeModel is provided", () => {
+  it("falls back to igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M when no lowComputeModel is provided", () => {
     const client = createInferenceClient(baseOptions);
     client.setLowComputeMode(true);
-    expect(client.getDefaultModel()).toBe("gemma4:e4b");
+    expect(client.getDefaultModel()).toBe("igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M");
   });
 
   it("restores defaultModel when low compute mode is disabled", () => {
     const client = createInferenceClient({
       ...baseOptions,
-      lowComputeModel: "gemma4:e4b",
+      lowComputeModel: "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M",
     });
     client.setLowComputeMode(true);
-    expect(client.getDefaultModel()).toBe("gemma4:e4b");
+    expect(client.getDefaultModel()).toBe("igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M");
     client.setLowComputeMode(false);
     expect(client.getDefaultModel()).toBe("glm-5.1");
   });

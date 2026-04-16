@@ -49,7 +49,7 @@ export const TASK_TIMEOUTS: Record<string, number> = {
 
 export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | "updatedAt">[] = [
   {
-    modelId: "gemma4:e4b",
+    modelId: "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M",
     provider: "ollama",
     displayName: "Gemma 4 E4B",
     tierMinimum: "critical",
@@ -83,31 +83,31 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
 
 export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
   high: {
-    agent_turn: { candidates: ["glm-5.1", "gemma4:e4b"], maxTokens: 8192, ceilingCents: -1 },
-    heartbeat_triage: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
-    safety_check: { candidates: ["glm-5.1", "gemma4:e4b"], maxTokens: 4096, ceilingCents: -1 },
-    summarization: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
-    planning: { candidates: ["glm-5.1", "gemma4:e4b"], maxTokens: 8192, ceilingCents: -1 },
+    agent_turn: { candidates: ["glm-5.1", "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 8192, ceilingCents: -1 },
+    heartbeat_triage: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 2048, ceilingCents: 0 },
+    safety_check: { candidates: ["glm-5.1", "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 4096, ceilingCents: -1 },
+    summarization: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 4096, ceilingCents: 0 },
+    planning: { candidates: ["glm-5.1", "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 8192, ceilingCents: -1 },
   },
   normal: {
-    agent_turn: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
-    heartbeat_triage: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
-    safety_check: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
-    summarization: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
-    planning: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
+    agent_turn: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 4096, ceilingCents: 0 },
+    heartbeat_triage: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 2048, ceilingCents: 0 },
+    safety_check: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 4096, ceilingCents: 0 },
+    summarization: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 4096, ceilingCents: 0 },
+    planning: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 4096, ceilingCents: 0 },
   },
   low_compute: {
-    agent_turn: { candidates: ["gemma4:e4b"], maxTokens: 4096, ceilingCents: 0 },
-    heartbeat_triage: { candidates: ["gemma4:e4b"], maxTokens: 1024, ceilingCents: 0 },
-    safety_check: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
-    summarization: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
-    planning: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
+    agent_turn: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 4096, ceilingCents: 0 },
+    heartbeat_triage: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 1024, ceilingCents: 0 },
+    safety_check: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 2048, ceilingCents: 0 },
+    summarization: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 2048, ceilingCents: 0 },
+    planning: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 2048, ceilingCents: 0 },
   },
   critical: {
-    agent_turn: { candidates: ["gemma4:e4b"], maxTokens: 2048, ceilingCents: 0 },
-    heartbeat_triage: { candidates: ["gemma4:e4b"], maxTokens: 512, ceilingCents: 0 },
-    safety_check: { candidates: ["gemma4:e4b"], maxTokens: 1024, ceilingCents: 0 },
-    summarization: { candidates: ["gemma4:e4b"], maxTokens: 1024, ceilingCents: 0 },
+    agent_turn: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 2048, ceilingCents: 0 },
+    heartbeat_triage: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 512, ceilingCents: 0 },
+    safety_check: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 1024, ceilingCents: 0 },
+    summarization: { candidates: ["igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"], maxTokens: 1024, ceilingCents: 0 },
     planning: { candidates: [], maxTokens: 0, ceilingCents: 0 },
   },
   dead: {
@@ -122,9 +122,9 @@ export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
 // === Default Model Strategy Config ===
 
 export const DEFAULT_MODEL_STRATEGY_CONFIG: ModelStrategyConfig = {
-  inferenceModel: "gemma4:e4b",
-  lowComputeModel: "gemma4:e4b",
-  criticalModel: "gemma4:e4b",
+  inferenceModel: "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M",
+  lowComputeModel: "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M",
+  criticalModel: "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M",
   maxTokensPerTurn: 4096,
   hourlyBudgetCents: 0,
   sessionBudgetCents: 0,

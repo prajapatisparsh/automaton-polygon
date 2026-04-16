@@ -138,7 +138,7 @@ export function createConfig(params: {
     openaiApiKey: params.openaiApiKey,
     anthropicApiKey: params.anthropicApiKey,
     ollamaBaseUrl: params.ollamaBaseUrl || DEFAULT_CONFIG.ollamaBaseUrl,
-    inferenceModel: DEFAULT_CONFIG.inferenceModel || "gemma4:e4b",
+    inferenceModel: DEFAULT_CONFIG.inferenceModel || "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M",
     maxTokensPerTurn: DEFAULT_CONFIG.maxTokensPerTurn || 4096,
     heartbeatConfigPath:
       DEFAULT_CONFIG.heartbeatConfigPath || "~/.automaton/heartbeat.yml",

@@ -21,7 +21,7 @@ import { getUSDCBalance, sendUSDC, toUsdcCents } from "./polygon.js";
 
 const DEFAULT_MODELS: ModelInfo[] = [
   {
-    id: "gemma4:e4b",
+    id: "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M",
     provider: "ollama",
     pricing: { inputPerMillion: 0, outputPerMillion: 0 },
   },

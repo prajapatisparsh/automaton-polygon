@@ -106,10 +106,10 @@ export function getModelForTier(
     case "normal":
       return defaultModel;
     case "low_compute":
-      return "gemma4:e4b";
+      return "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M";
     case "critical":
-      return "gemma4:e4b";
+      return "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M";
     case "dead":
-      return "gemma4:e4b"; // Won't be used, but just in case
+      return "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M"; // Won't be used, but just in case
   }
 }

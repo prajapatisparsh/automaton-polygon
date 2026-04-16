@@ -79,7 +79,7 @@ export async function promptAddress(label: string, chainType?: string): Promise<
     } else {
       // EVM: 0x + 40 hex chars
       if (/^0x[0-9a-fA-F]{40}$/.test(value)) return value;
-      console.log(chalk.yellow("  Invalid Ethereum address. Must be 0x followed by 40 hex characters."));
+      console.log(chalk.yellow("  Invalid Polygon wallet address. Must be 0x followed by 40 hex characters."));
     }
   }
 }

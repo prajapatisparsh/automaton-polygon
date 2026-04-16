@@ -35,7 +35,7 @@ import type { ModelRegistryRow, InferenceCostRow, ModelStrategyConfig } from "..
 
 let db: BetterSqlite3.Database;
 
-const DEFAULT_LOCAL_MODEL = "gemma4:e4b";
+const DEFAULT_LOCAL_MODEL = "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M";
 const FULL_TIER_MODEL = "glm-5.1";
 
 function createTestDb(): BetterSqlite3.Database {

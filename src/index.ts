@@ -264,7 +264,7 @@ async function run(): Promise<void> {
   const inference = createInferenceClient({
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,
-    lowComputeModel: config.modelStrategy?.lowComputeModel || "gemma4:e4b",
+    lowComputeModel: config.modelStrategy?.lowComputeModel || "igorls/gemma-4-E4B-it-heretic-GGUF:Q4_K_M",
     ollamaBaseUrl,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
